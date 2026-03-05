@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from 'convex/react'
 import { useNavigate } from '@tanstack/react-router'
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -21,12 +21,9 @@ import { Switch } from '#/components/ui/switch'
 import {
   DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
   createRoomInputSchema,
+  type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
-import {
-  loadSessionProfile,
-  saveSessionProfile,
-  type SessionProfile,
-} from '#/lib/session'
+import { loadSessionProfile, saveSessionProfile } from '#/lib/session'
 
 export const Route = createFileRoute('/')({ component: RouteComponent })
 
@@ -36,17 +33,17 @@ function RouteComponent() {
   const publicRooms = useQuery(api.rooms.listPublicRooms, { limit: 12 })
   const roomPolicy = useQuery(api.rooms.defaultRoomPolicy, {})
 
-  const [sessionProfile, setSessionProfile] = useState<SessionProfile>(() =>
-    loadSessionProfile(),
-  )
+  const [sessionProfile, setSessionProfile] = useState(() => loadSessionProfile())
 
   const [watchUrl, setWatchUrl] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
   const [accessCode, setAccessCode] = useState('')
 
-  const [manualSoundboardPolicy, setManualSoundboardPolicy] = useState(false)
-  const [manualSoundboardEnabled, setManualSoundboardEnabled] = useState(true)
-  const [manualCapacity, setManualCapacity] = useState(10)
+  const [draftSoundboardPolicy, setDraftSoundboardPolicy] =
+    useState<SoundboardPolicy>({
+      kind: 'auto',
+      defaultMaxParticipants: DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
+    })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,12 +52,23 @@ function RouteComponent() {
     roomPolicy?.soundboardPolicy.defaultMaxParticipants ??
     DEFAULT_AUTO_SOUNDBOARD_CAPACITY
 
+  useEffect(() => {
+    setDraftSoundboardPolicy((current) =>
+      current.kind === 'auto'
+        ? {
+            kind: 'auto',
+            defaultMaxParticipants: autoCapacity,
+          }
+        : current,
+    )
+  }, [autoCapacity])
+
   const soundboardPreview = useMemo(() => {
-    if (manualSoundboardPolicy) {
-      return `${manualSoundboardEnabled ? 'Enabled' : 'Disabled'} up to ${manualCapacity} participants`
+    if (draftSoundboardPolicy.kind === 'manual') {
+      return `${draftSoundboardPolicy.enabled ? 'Enabled' : 'Disabled'} up to ${draftSoundboardPolicy.maxParticipants} participants`
     }
-    return `Auto mode: enabled up to ${autoCapacity} participants`
-  }, [autoCapacity, manualCapacity, manualSoundboardEnabled, manualSoundboardPolicy])
+    return `Auto mode: enabled up to ${draftSoundboardPolicy.defaultMaxParticipants} participants`
+  }, [draftSoundboardPolicy])
 
   async function onCreateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -78,16 +86,7 @@ function RouteComponent() {
           : {
               kind: 'public',
             },
-        soundboardPolicy: manualSoundboardPolicy
-          ? {
-              kind: 'manual',
-              enabled: manualSoundboardEnabled,
-              maxParticipants: manualCapacity,
-            }
-          : {
-              kind: 'auto',
-              defaultMaxParticipants: autoCapacity,
-            },
+        soundboardPolicy: draftSoundboardPolicy,
       })
 
       const created = await createRoom({
@@ -115,7 +114,7 @@ function RouteComponent() {
     }
   }
 
-  function updateDisplayName(value: string): void {
+  function updateDisplayName(value: string) {
     setSessionProfile((current) =>
       saveSessionProfile({
         ...current,
@@ -205,20 +204,44 @@ function RouteComponent() {
                   </div>
                   <Switch
                     id="manual-policy"
-                    checked={manualSoundboardPolicy}
-                    onCheckedChange={setManualSoundboardPolicy}
+                    checked={draftSoundboardPolicy.kind === 'manual'}
+                    onCheckedChange={(checked) => {
+                      setDraftSoundboardPolicy((current) => {
+                        if (checked) {
+                          if (current.kind === 'manual') {
+                            return current
+                          }
+                          return {
+                            kind: 'manual',
+                            enabled: true,
+                            maxParticipants: autoCapacity,
+                          }
+                        }
+                        return {
+                          kind: 'auto',
+                          defaultMaxParticipants: autoCapacity,
+                        }
+                      })
+                    }}
                   />
                 </div>
 
-                {manualSoundboardPolicy ? (
+                {draftSoundboardPolicy.kind === 'manual' ? (
                   <>
                     <div className="flex items-center gap-3">
                       <Checkbox
                         id="manual-enabled"
-                        checked={manualSoundboardEnabled}
-                        onCheckedChange={(checked) =>
-                          setManualSoundboardEnabled(Boolean(checked))
-                        }
+                        checked={draftSoundboardPolicy.enabled}
+                        onCheckedChange={(checked) => {
+                          setDraftSoundboardPolicy((current) =>
+                            current.kind === 'manual'
+                              ? {
+                                  ...current,
+                                  enabled: Boolean(checked),
+                                }
+                              : current,
+                          )
+                        }}
                       />
                       <Label htmlFor="manual-enabled">Enable soundboard</Label>
                     </div>
@@ -226,14 +249,23 @@ function RouteComponent() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Max participants</span>
-                        <span>{manualCapacity}</span>
+                        <span>{draftSoundboardPolicy.maxParticipants}</span>
                       </div>
                       <Slider
-                        value={[manualCapacity]}
+                        value={[draftSoundboardPolicy.maxParticipants]}
                         min={2}
                         max={30}
                         step={1}
-                        onValueChange={(values) => setManualCapacity(values[0] ?? 10)}
+                        onValueChange={(values) => {
+                          setDraftSoundboardPolicy((current) =>
+                            current.kind === 'manual'
+                              ? {
+                                  ...current,
+                                  maxParticipants: values[0] ?? current.maxParticipants,
+                                }
+                              : current,
+                          )
+                        }}
                       />
                     </div>
                   </>

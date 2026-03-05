@@ -15,13 +15,80 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Slider } from '#/components/ui/slider'
 import { Switch } from '#/components/ui/switch'
-import { getWatchFrameUrl, normalizeRoomCode } from '#/lib/teleparty-domain'
+import {
+  canUseSoundboard,
+  getWatchFrameUrl,
+  normalizeRoomCode,
+  type SoundboardPolicy,
+} from '#/lib/teleparty-domain'
 import { loadSessionProfile } from '#/lib/session'
 import { playSound, sounds } from '#/lib/soundboard'
 
 export const Route = createFileRoute('/rooms/$roomCode')({
   component: RoomRoute,
 })
+
+function sameSoundboardPolicy(
+  left: SoundboardPolicy,
+  right: SoundboardPolicy,
+): boolean {
+  if (left.kind !== right.kind) {
+    return false
+  }
+
+  if (left.kind === 'manual' && right.kind === 'manual') {
+    return (
+      left.enabled === right.enabled &&
+      left.maxParticipants === right.maxParticipants
+    )
+  }
+
+  if (left.kind === 'auto' && right.kind === 'auto') {
+    return left.defaultMaxParticipants === right.defaultMaxParticipants
+  }
+
+  return false
+}
+
+function roomToSoundboardPolicy(room: {
+  autoSoundboardCapacity: number
+  manualSoundboardCapacity: number
+  manualSoundboardEnabled: boolean
+  soundboardMode: string
+}): SoundboardPolicy {
+  if (room.soundboardMode === 'manual') {
+    return {
+      kind: 'manual',
+      enabled: room.manualSoundboardEnabled,
+      maxParticipants: room.manualSoundboardCapacity,
+    }
+  }
+
+  return {
+    kind: 'auto',
+    defaultMaxParticipants: room.autoSoundboardCapacity,
+  }
+}
+
+function soundboardPolicyToReducerInput(policy: SoundboardPolicy): {
+  enabled: boolean
+  maxParticipants: number
+  mode: 'auto' | 'manual'
+} {
+  if (policy.kind === 'manual') {
+    return {
+      mode: 'manual',
+      enabled: policy.enabled,
+      maxParticipants: policy.maxParticipants,
+    }
+  }
+
+  return {
+    mode: 'auto',
+    enabled: true,
+    maxParticipants: policy.defaultMaxParticipants,
+  }
+}
 
 function RoomRoute() {
   const params = Route.useParams()
@@ -40,10 +107,9 @@ function RoomRoute() {
   const [draftAccessCode, setDraftAccessCode] = useState('')
   const [submittedAccessCode, setSubmittedAccessCode] = useState('')
 
-  const [ownerManualMode, setOwnerManualMode] = useState(false)
-  const [ownerEnabled, setOwnerEnabled] = useState(true)
-  const [ownerCapacity, setOwnerCapacity] = useState(10)
-  const [settingsDirty, setSettingsDirty] = useState(false)
+  const [ownerDraftPolicy, setOwnerDraftPolicy] = useState<SoundboardPolicy | null>(
+    null,
+  )
 
   const [soundError, setSoundError] = useState<string | null>(null)
 
@@ -55,27 +121,25 @@ function RoomRoute() {
     }
   }, [params.roomCode])
 
+  const activeRoomCode = roomCode ?? '__invalid_room__'
+
   const [roomRows] = useTable(
-    roomCode ? tables.room.where((room) => room.roomCode.eq(roomCode)) : tables.room,
+    tables.room.where((room) => room.roomCode.eq(activeRoomCode)),
   )
 
   const [participantRows] = useTable(
-    roomCode
-      ? tables.participant.where((participant) => participant.roomCode.eq(roomCode))
-      : tables.participant,
+    tables.participant.where((participant) => participant.roomCode.eq(activeRoomCode)),
   )
 
   const [soundRows] = useTable(
-    roomCode
-      ? tables.soundEvent.where((soundEvent) => soundEvent.roomCode.eq(roomCode))
-      : tables.soundEvent,
+    tables.soundEvent.where((soundEvent) => soundEvent.roomCode.eq(activeRoomCode)),
   )
 
   const room = useMemo(() => {
     if (!roomCode) {
       return null
     }
-    return roomRows.find((candidate) => candidate.roomCode === roomCode) ?? null
+    return roomRows[0] ?? null
   }, [roomCode, roomRows])
 
   const watchFrameUrl = useMemo(() => {
@@ -89,7 +153,7 @@ function RoomRoute() {
     if (!roomCode) {
       return []
     }
-    return participantRows.filter((participant) => participant.roomCode === roomCode)
+    return participantRows
   }, [participantRows, roomCode])
 
   const roomSoundEvents = useMemo(() => {
@@ -97,9 +161,46 @@ function RoomRoute() {
       return []
     }
     return [...soundRows]
-      .filter((soundEvent) => soundEvent.roomCode === roomCode)
       .sort((a, b) => a.createdAtMs - b.createdAtMs)
   }, [roomCode, soundRows])
+
+  const roomPolicy = useMemo(() => {
+    if (!room) {
+      return null
+    }
+    return roomToSoundboardPolicy(room)
+  }, [room])
+
+  const roomPolicySignature = useMemo(() => {
+    if (!roomPolicy) {
+      return null
+    }
+    return JSON.stringify(roomPolicy)
+  }, [roomPolicy])
+
+  const lastSyncedPolicySignature = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!roomPolicy || !roomPolicySignature) {
+      lastSyncedPolicySignature.current = null
+      setOwnerDraftPolicy(null)
+      return
+    }
+    if (lastSyncedPolicySignature.current === roomPolicySignature) {
+      return
+    }
+    lastSyncedPolicySignature.current = roomPolicySignature
+    setOwnerDraftPolicy(roomPolicy)
+  }, [roomCode, roomPolicy, roomPolicySignature])
+
+  const effectiveOwnerPolicy = ownerDraftPolicy ?? roomPolicy
+
+  const settingsDirty = useMemo(() => {
+    if (!effectiveOwnerPolicy || !roomPolicy) {
+      return false
+    }
+    return !sameSoundboardPolicy(effectiveOwnerPolicy, roomPolicy)
+  }, [effectiveOwnerPolicy, roomPolicy])
 
   const joiningRef = useRef(false)
 
@@ -166,23 +267,6 @@ function RoomRoute() {
     }
   }, [hasJoined, leaveRoom, roomCode, sessionProfile.sessionId])
 
-  useEffect(() => {
-    if (!room) {
-      return
-    }
-
-    if (room.soundboardMode === 'manual') {
-      setOwnerManualMode(true)
-      setOwnerEnabled(room.manualSoundboardEnabled)
-      setOwnerCapacity(room.manualSoundboardCapacity)
-    } else {
-      setOwnerManualMode(false)
-      setOwnerEnabled(true)
-      setOwnerCapacity(room.autoSoundboardCapacity)
-    }
-    setSettingsDirty(false)
-  }, [room])
-
   const seenSoundEvents = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -248,19 +332,17 @@ function RoomRoute() {
   }
 
   async function onSaveSoundboardSettings() {
-    if (!roomCode || !room) {
+    if (!roomCode || !room || !effectiveOwnerPolicy) {
       return
     }
 
     await updateSoundboardPolicy({
       roomCode,
       ownerSessionId: sessionProfile.sessionId,
-      mode: ownerManualMode ? 'manual' : 'auto',
-      enabled: ownerEnabled,
-      maxParticipants: ownerCapacity,
+      ...soundboardPolicyToReducerInput(effectiveOwnerPolicy),
     })
 
-    setSettingsDirty(false)
+    setOwnerDraftPolicy(null)
   }
 
   async function onPrivateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -353,10 +435,9 @@ function RoomRoute() {
   }
 
   const participantCount = roomParticipants.length
-  const soundboardEnabled =
-    room.soundboardMode === 'manual'
-      ? room.manualSoundboardEnabled && participantCount <= room.manualSoundboardCapacity
-      : participantCount <= room.autoSoundboardCapacity
+  const soundboardEnabled = roomPolicy
+    ? canUseSoundboard(roomPolicy, participantCount)
+    : false
 
   const isOwner = room.ownerSessionId === sessionProfile.sessionId
 
@@ -494,22 +575,48 @@ function RoomRoute() {
                     </p>
                   </div>
                   <Switch
-                    checked={ownerManualMode}
+                    checked={effectiveOwnerPolicy?.kind === 'manual'}
                     onCheckedChange={(value) => {
-                      setOwnerManualMode(value)
-                      setSettingsDirty(true)
+                      if (!effectiveOwnerPolicy) {
+                        return
+                      }
+                      if (value) {
+                        if (effectiveOwnerPolicy.kind === 'manual') {
+                          setOwnerDraftPolicy(effectiveOwnerPolicy)
+                          return
+                        }
+                        setOwnerDraftPolicy({
+                          kind: 'manual',
+                          enabled: true,
+                          maxParticipants: effectiveOwnerPolicy.defaultMaxParticipants,
+                        })
+                        return
+                      }
+                      if (effectiveOwnerPolicy.kind === 'auto') {
+                        setOwnerDraftPolicy(effectiveOwnerPolicy)
+                        return
+                      }
+                      setOwnerDraftPolicy({
+                        kind: 'auto',
+                        defaultMaxParticipants: effectiveOwnerPolicy.maxParticipants,
+                      })
                     }}
                   />
                 </div>
 
-                {ownerManualMode ? (
+                {effectiveOwnerPolicy?.kind === 'manual' ? (
                   <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/40 px-3 py-2">
                     <p className="m-0 text-sm font-semibold">Enabled</p>
                     <Switch
-                      checked={ownerEnabled}
+                      checked={effectiveOwnerPolicy.enabled}
                       onCheckedChange={(value) => {
-                        setOwnerEnabled(value)
-                        setSettingsDirty(true)
+                        if (effectiveOwnerPolicy.kind !== 'manual') {
+                          return
+                        }
+                        setOwnerDraftPolicy({
+                          ...effectiveOwnerPolicy,
+                          enabled: value,
+                        })
                       }}
                     />
                   </div>
@@ -518,16 +625,37 @@ function RoomRoute() {
                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-3">
                   <div className="flex items-center justify-between text-sm">
                     <span>Max participants</span>
-                    <span className="font-semibold">{ownerCapacity}</span>
+                    <span className="font-semibold">
+                      {effectiveOwnerPolicy?.kind === 'manual'
+                        ? effectiveOwnerPolicy.maxParticipants
+                        : effectiveOwnerPolicy?.defaultMaxParticipants ?? 0}
+                    </span>
                   </div>
                   <Slider
-                    value={[ownerCapacity]}
+                    value={[
+                      effectiveOwnerPolicy?.kind === 'manual'
+                        ? effectiveOwnerPolicy.maxParticipants
+                        : effectiveOwnerPolicy?.defaultMaxParticipants ?? 8,
+                    ]}
                     min={2}
                     max={40}
                     step={1}
                     onValueChange={(value) => {
-                      setOwnerCapacity(value[0] ?? 8)
-                      setSettingsDirty(true)
+                      const capacity = value[0] ?? 8
+                      if (!effectiveOwnerPolicy) {
+                        return
+                      }
+                      if (effectiveOwnerPolicy.kind === 'manual') {
+                        setOwnerDraftPolicy({
+                          ...effectiveOwnerPolicy,
+                          maxParticipants: capacity,
+                        })
+                        return
+                      }
+                      setOwnerDraftPolicy({
+                        ...effectiveOwnerPolicy,
+                        defaultMaxParticipants: capacity,
+                      })
                     }}
                   />
                 </div>

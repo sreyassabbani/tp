@@ -9,7 +9,7 @@ const sessionSchema = z.object({
 
 export type SessionProfile = z.infer<typeof sessionSchema>
 
-const storageKey = 'tp-convex-session-v1'
+const storageKey = 'tp-spacetime-session-v1'
 const makeId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 20)
 
 const adjectives = [

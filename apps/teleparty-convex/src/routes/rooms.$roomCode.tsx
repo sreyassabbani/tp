@@ -16,6 +16,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Slider } from '#/components/ui/slider'
 import { Switch } from '#/components/ui/switch'
+import { getRelativeCursorPosition } from '#/lib/cursor-stage'
 import {
   canUseSoundboard,
   getWatchFrameUrl,
@@ -201,9 +202,13 @@ function RoomRoute() {
       return
     }
 
-    const rect = area.getBoundingClientRect()
-    const x = (event.clientX - rect.left) / rect.width
-    const y = (event.clientY - rect.top) / rect.height
+    const cursorPosition = getRelativeCursorPosition(
+      area.getBoundingClientRect(),
+      event,
+    )
+    if (!cursorPosition) {
+      return
+    }
 
     lastCursorUpdateAt.current = now
 
@@ -212,8 +217,8 @@ function RoomRoute() {
       sessionId: sessionProfile.sessionId,
       displayName: sessionProfile.displayName,
       color: sessionProfile.color,
-      x,
-      y,
+      x: cursorPosition.x,
+      y: cursorPosition.y,
     })
   }
 
@@ -365,7 +370,8 @@ function RoomRoute() {
           <CardHeader>
             <CardTitle>Shared Stage</CardTitle>
             <CardDescription>
-              Cursor movement is streamed to everyone in this room.
+              Cursor movement is streamed to everyone in this room. The preview is
+              hover-only so tracking stays continuous across the whole stage.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -379,7 +385,7 @@ function RoomRoute() {
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe
-                className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background"
+                className="pointer-events-none absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background"
                 src={watchFrameUrl ?? room.watchUrl}
                 title={`Room ${room.roomCode} watch frame`}
               />

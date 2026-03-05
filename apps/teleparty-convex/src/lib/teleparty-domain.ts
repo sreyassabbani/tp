@@ -89,3 +89,92 @@ export function canUseSoundboard(
   }
   return policy.enabled && participantCount <= policy.maxParticipants
 }
+
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'youtu.be',
+  'www.youtu.be',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+])
+
+const youtubeIdSchema = z
+  .string()
+  .regex(/^[a-zA-Z0-9_-]{11}$/)
+
+function parseYouTubeVideoId(url: URL): string | null {
+  const host = url.hostname.toLowerCase()
+  if (!YOUTUBE_HOSTS.has(host)) {
+    return null
+  }
+
+  if (host.includes('youtu.be')) {
+    const id = url.pathname.split('/').filter(Boolean)[0]
+    if (!id) {
+      return null
+    }
+    return youtubeIdSchema.safeParse(id).success ? id : null
+  }
+
+  const pathSegments = url.pathname.split('/').filter(Boolean)
+  const firstSegment = pathSegments[0]
+  const secondSegment = pathSegments[1]
+
+  if (firstSegment === 'watch') {
+    const id = url.searchParams.get('v')
+    if (!id) {
+      return null
+    }
+    return youtubeIdSchema.safeParse(id).success ? id : null
+  }
+
+  if ((firstSegment === 'embed' || firstSegment === 'shorts') && secondSegment) {
+    return youtubeIdSchema.safeParse(secondSegment).success ? secondSegment : null
+  }
+
+  return null
+}
+
+function parseYouTubeStartSeconds(value: string | null): number | null {
+  if (!value) {
+    return null
+  }
+
+  if (/^\d+$/.test(value)) {
+    return Number(value)
+  }
+
+  const match = value.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/)
+  if (!match) {
+    return null
+  }
+
+  const hours = Number(match[1] ?? '0')
+  const minutes = Number(match[2] ?? '0')
+  const seconds = Number(match[3] ?? '0')
+
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds
+  return totalSeconds > 0 ? totalSeconds : null
+}
+
+export function getWatchFrameUrl(watchUrl: string): string {
+  const parsed = new URL(watchUrl)
+  const videoId = parseYouTubeVideoId(parsed)
+
+  if (!videoId) {
+    return parsed.toString()
+  }
+
+  const embedUrl = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
+  const startSeconds =
+    parseYouTubeStartSeconds(parsed.searchParams.get('start')) ??
+    parseYouTubeStartSeconds(parsed.searchParams.get('t'))
+
+  if (startSeconds) {
+    embedUrl.searchParams.set('start', String(startSeconds))
+  }
+
+  return embedUrl.toString()
+}

@@ -16,7 +16,11 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Slider } from '#/components/ui/slider'
 import { Switch } from '#/components/ui/switch'
-import { canUseSoundboard, normalizeRoomCode } from '#/lib/teleparty-domain'
+import {
+  canUseSoundboard,
+  getWatchFrameUrl,
+  normalizeRoomCode,
+} from '#/lib/teleparty-domain'
 import { loadSessionProfile } from '#/lib/session'
 import { playSound, sounds } from '#/lib/soundboard'
 
@@ -290,6 +294,7 @@ function RoomRoute() {
     room.soundboardPolicy,
     onlineParticipantCount,
   )
+  const watchFrameUrl = useMemo(() => getWatchFrameUrl(room.watchUrl), [room.watchUrl])
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
@@ -335,7 +340,7 @@ function RoomRoute() {
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe
                 className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background"
-                src={room.watchUrl}
+                src={watchFrameUrl}
                 title={`Room ${room.roomCode} watch frame`}
               />
 

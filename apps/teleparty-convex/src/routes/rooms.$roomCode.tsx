@@ -101,6 +101,13 @@ function RoomRoute() {
     return presenceState.filter((presence) => presence.online).length
   }, [presenceState, roomLookup])
 
+  const watchFrameUrl = useMemo(() => {
+    if (roomLookup?.kind !== 'ok') {
+      return null
+    }
+    return getWatchFrameUrl(roomLookup.room.watchUrl)
+  }, [roomLookup])
+
   useEffect(() => {
     if (roomLookup?.kind !== 'ok') {
       return
@@ -294,7 +301,6 @@ function RoomRoute() {
     room.soundboardPolicy,
     onlineParticipantCount,
   )
-  const watchFrameUrl = useMemo(() => getWatchFrameUrl(room.watchUrl), [room.watchUrl])
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
@@ -340,7 +346,7 @@ function RoomRoute() {
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe
                 className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background"
-                src={watchFrameUrl}
+                src={watchFrameUrl ?? room.watchUrl}
                 title={`Room ${room.roomCode} watch frame`}
               />
 

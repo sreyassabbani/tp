@@ -18,14 +18,15 @@ TanStack Start + shadcn UI + Convex backend.
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp pnpm convex:dev
+direnv exec /Users/sreysus/workflow/tp bun install
+direnv exec /Users/sreysus/workflow/tp bun run convex:dev
 ```
 
 Then in another terminal:
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp pnpm dev
+direnv exec /Users/sreysus/workflow/tp bun run dev
 ```
 
 App URL: `http://localhost:3001`
@@ -33,5 +34,5 @@ App URL: `http://localhost:3001`
 ## Build
 
 ```bash
-direnv exec /Users/sreysus/workflow/tp pnpm build
+direnv exec /Users/sreysus/workflow/tp bun run build
 ```

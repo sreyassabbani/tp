@@ -13,9 +13,9 @@
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
-    "convex:dev": "dotenv -e .env.local -- pnpm exec convex dev --typecheck disable",
-    "convex:dev:once": "dotenv -e .env.local -- pnpm exec convex dev --once --typecheck disable --tail-logs disable",
-    "convex:codegen": "dotenv -e .env.local -- pnpm exec convex codegen --typecheck disable"
+    "convex:dev": "dotenv -e .env.local -- bunx convex dev --typecheck disable",
+    "convex:dev:once": "dotenv -e .env.local -- bunx convex dev --once --typecheck disable --tail-logs disable",
+    "convex:codegen": "dotenv -e .env.local -- bunx convex codegen --typecheck disable"
   },
   "dependencies": {
     "@convex-dev/presence": "^0.3.0",
@@ -60,11 +60,5 @@
     "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "lightningcss"
-    ]
   }
 }

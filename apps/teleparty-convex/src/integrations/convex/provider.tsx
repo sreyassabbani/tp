@@ -3,7 +3,7 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react'
 const convexUrl = import.meta.env.VITE_CONVEX_URL
 
 if (!convexUrl) {
-  throw new Error('VITE_CONVEX_URL is required. Run `pnpm convex:dev` first.')
+  throw new Error('VITE_CONVEX_URL is required. Run `bun run convex:dev` first.')
 }
 
 const convexClient = new ConvexReactClient(convexUrl)

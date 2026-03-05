@@ -16,31 +16,33 @@ TanStack Start + shadcn UI + SpacetimeDB v2.0 TypeScript module.
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:start
+direnv exec /Users/sreysus/workflow/tp bun install
+direnv exec /Users/sreysus/workflow/tp bun --cwd spacetimedb install
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:start
 ```
 
 2) Publish module and generate typed bindings:
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:publish:local
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:generate
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:publish:local
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
 ```
 
 3) Start web app:
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm dev
+direnv exec /Users/sreysus/workflow/tp bun run dev
 ```
 
 App URL: `http://localhost:3002`
 SpacetimeDB URL: `ws://127.0.0.1:3010`
 
-If publish auth gets stuck, delete `.spacetime/data` and restart `pnpm spacetime:start`.
+If publish auth gets stuck, delete `.spacetime/data` and restart `bun run spacetime:start`.
 
 ## Build
 
 ```bash
-direnv exec /Users/sreysus/workflow/tp pnpm build
+direnv exec /Users/sreysus/workflow/tp bun run build
 ```

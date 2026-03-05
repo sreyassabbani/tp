@@ -21,7 +21,7 @@ direnv allow
 
 The dev shell is pinned to DeterminateSystems weekly nixpkgs and includes:
 
-- Node.js / pnpm / bun
+- Node.js / bun
 - Rust toolchain
 - SpacetimeDB CLI `v2.0.3`
 
@@ -33,14 +33,15 @@ Terminal 1:
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp pnpm convex:dev
+direnv exec /Users/sreysus/workflow/tp bun install
+direnv exec /Users/sreysus/workflow/tp bun run convex:dev
 ```
 
 Terminal 2:
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp pnpm dev
+direnv exec /Users/sreysus/workflow/tp bun run dev
 ```
 
 App URL: `http://localhost:3001`
@@ -51,22 +52,24 @@ Terminal 1 (local database server):
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:start
+direnv exec /Users/sreysus/workflow/tp bun install
+direnv exec /Users/sreysus/workflow/tp bun --cwd spacetimedb install
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:start
 ```
 
 Terminal 2 (publish module + generate bindings):
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:publish:local
-direnv exec /Users/sreysus/workflow/tp pnpm spacetime:generate
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:publish:local
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
 ```
 
 Terminal 3 (web app):
 
 ```bash
 cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp pnpm dev
+direnv exec /Users/sreysus/workflow/tp bun run dev
 ```
 
 App URL: `http://localhost:3002`

@@ -73,7 +73,6 @@
           packages = with pkgs; [
             nodejs_24
             bun
-            pnpm
             git
             jq
             rustc
@@ -86,7 +85,6 @@
             echo \"Nix dev shell activated\"
             echo \"Node:  $(node --version 2>/dev/null || echo 'not found')\"
             echo \"Bun:   $(bun --version 2>/dev/null || echo 'not found')\"
-            echo \"pnpm:  $(pnpm --version 2>/dev/null || echo 'not found')\"
             echo \"spacetime: $(spacetime --version 2>/dev/null || echo 'not found')\"
           ";
         };

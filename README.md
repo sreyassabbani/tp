@@ -27,6 +27,46 @@ The dev shell is pinned to DeterminateSystems weekly nixpkgs and includes:
 
 ## Quick start
 
+## Justfile workflow
+
+Use `just` from the repo root to run the nix+direnv+Bun commands consistently.
+
+```bash
+cd /Users/sreysus/workflow/tp
+just bootstrap
+```
+
+Convex flow (two terminals):
+
+```bash
+just convex-backend
+just convex-web
+```
+
+Spacetime flow (three terminals):
+
+```bash
+just spacetime-db
+just spacetime-sync
+just spacetime-web
+```
+
+Build flow:
+
+```bash
+just build-all
+```
+
+Command/process summary:
+
+- `just bootstrap`: installs Bun dependencies in all relevant packages.
+- `just convex-backend`: starts Convex backend/dev sync and keeps `.env.local` endpoints current.
+- `just convex-web`: starts the Convex web client on port `3001`.
+- `just spacetime-db`: starts local SpacetimeDB on `127.0.0.1:3010` with data in `.spacetime/data`.
+- `just spacetime-sync`: publishes the Spacetime module and regenerates typed bindings.
+- `just spacetime-web`: starts the Spacetime web client on port `3002`.
+- `just build-all`: runs production builds for both implementations.
+
 ### Convex version
 
 Terminal 1:

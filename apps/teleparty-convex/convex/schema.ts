@@ -64,6 +64,25 @@ export default defineSchema({
     .index('by_room_session', ['roomCode', 'sessionId'])
     .index('by_room_updated', ['roomCode', 'updatedAt']),
 
+  roomParticipantProfiles: defineTable({
+    roomCode: v.string(),
+    sessionId: v.string(),
+    displayName: v.string(),
+    color: v.string(),
+    lastSeenAt: v.number(),
+  })
+    .index('by_room_session', ['roomCode', 'sessionId'])
+    .index('by_room_last_seen', ['roomCode', 'lastSeenAt']),
+
+  roomCapabilityGrants: defineTable({
+    roomCode: v.string(),
+    sessionId: v.string(),
+    capabilities: v.array(v.string()),
+    updatedAt: v.number(),
+  })
+    .index('by_room_session', ['roomCode', 'sessionId'])
+    .index('by_room_updated', ['roomCode', 'updatedAt']),
+
   soundboardEvents: defineTable({
     eventId: v.string(),
     roomCode: v.string(),

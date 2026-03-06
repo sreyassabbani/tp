@@ -4,12 +4,16 @@ import { ConvexError, v } from 'convex/values'
 import {
   DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
   ROOM_CODE_LENGTH,
+  colorSchema,
+  displayNameSchema,
+  type RoomCapability,
   type StageInteractionPolicy,
   canUseSoundboard,
   createRoomSchema,
   cursorUpdateSchema,
   normalizeAccessCode,
   ownerSessionSecretSchema,
+  roomCapabilitiesSchema,
   roomCodeSchema,
   roomLookupSchema,
   sessionIdSchema,
@@ -30,9 +34,10 @@ const roomCodeGenerator = customAlphabet(
 const MAX_PUBLIC_ROOMS = 24
 const MAX_CURSOR_ROWS = 300
 const MAX_SOUND_EVENTS = 120
+const MAX_PARTICIPANT_ROWS = 120
 const CURSOR_STALE_MS = 15_000
 const DEFAULT_STAGE_INTERACTION_POLICY: StageInteractionPolicy = {
-  kind: 'owner_only',
+  kind: 'everyone',
 }
 
 const visibilityValidator = v.union(
@@ -65,6 +70,8 @@ const stageInteractionPolicyValidator = v.union(
     kind: v.literal('everyone'),
   }),
 )
+
+const roomCapabilitiesValidator = v.array(v.string())
 
 const roomRateLimiter = new RateLimiter(components.rateLimiter, {
   cursorBurst: {
@@ -135,10 +142,87 @@ async function trimSoundEvents(ctx: any, roomCode: string): Promise<void> {
   )
 }
 
+async function trimParticipantProfiles(ctx: any, roomCode: string): Promise<void> {
+  const rows = await ctx.db
+    .query('roomParticipantProfiles')
+    .withIndex('by_room_last_seen', (q: any) => q.eq('roomCode', roomCode))
+    .order('desc')
+    .take(MAX_PARTICIPANT_ROWS + 40)
+
+  if (rows.length <= MAX_PARTICIPANT_ROWS) {
+    return
+  }
+
+  await Promise.all(
+    rows.slice(MAX_PARTICIPANT_ROWS).map((row: any) => ctx.db.delete(row._id)),
+  )
+}
+
 function getStageInteractionPolicy(room: {
   stageInteractionPolicy?: StageInteractionPolicy
 }): StageInteractionPolicy {
   return room.stageInteractionPolicy ?? DEFAULT_STAGE_INTERACTION_POLICY
+}
+
+function hasGrantedCapability(
+  capabilities: RoomCapability[],
+  capability: RoomCapability,
+): boolean {
+  return capabilities.includes(capability)
+}
+
+async function upsertParticipantProfileRow(
+  ctx: any,
+  participant: {
+    roomCode: string
+    sessionId: string
+    displayName: string
+    color: string
+  },
+): Promise<void> {
+  const existing = await ctx.db
+    .query('roomParticipantProfiles')
+    .withIndex('by_room_session', (q: any) =>
+      q.eq('roomCode', participant.roomCode).eq('sessionId', participant.sessionId),
+    )
+    .first()
+
+  const lastSeenAt = Date.now()
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      displayName: participant.displayName,
+      color: participant.color,
+      lastSeenAt,
+    })
+  } else {
+    await ctx.db.insert('roomParticipantProfiles', {
+      roomCode: participant.roomCode,
+      sessionId: participant.sessionId,
+      displayName: participant.displayName,
+      color: participant.color,
+      lastSeenAt,
+    })
+  }
+
+  await trimParticipantProfiles(ctx, participant.roomCode)
+}
+
+async function listParticipantCapabilityGrants(
+  ctx: any,
+  roomCode: string,
+): Promise<Map<string, RoomCapability[]>> {
+  const rows = await ctx.db
+    .query('roomCapabilityGrants')
+    .withIndex('by_room_updated', (q: any) => q.eq('roomCode', roomCode))
+    .collect()
+
+  return new Map(
+    rows.map((row: any) => [
+      row.sessionId,
+      roomCapabilitiesSchema.parse(row.capabilities),
+    ]),
+  )
 }
 
 async function assertOwnerControl(
@@ -175,6 +259,7 @@ export const createRoom = mutation({
     ownerSessionId: v.string(),
     ownerSessionSecret: v.string(),
     ownerDisplayName: v.string(),
+    ownerColor: v.string(),
     visibility: visibilityValidator,
     soundboardPolicy: soundboardPolicyValidator,
     stageInteractionPolicy: stageInteractionPolicyValidator,
@@ -185,6 +270,7 @@ export const createRoom = mutation({
       ownerSessionId: args.ownerSessionId,
       ownerSessionSecret: args.ownerSessionSecret,
       ownerDisplayName: args.ownerDisplayName,
+      ownerColor: args.ownerColor,
       visibility: args.visibility,
       soundboardPolicy: args.soundboardPolicy,
       stageInteractionPolicy: args.stageInteractionPolicy,
@@ -208,6 +294,13 @@ export const createRoom = mutation({
       soundboardPolicy: parsed.soundboardPolicy,
       stageInteractionPolicy: parsed.stageInteractionPolicy,
       archived: false,
+    })
+
+    await upsertParticipantProfileRow(ctx, {
+      roomCode,
+      sessionId: parsed.ownerSessionId,
+      displayName: parsed.ownerDisplayName,
+      color: parsed.ownerColor,
     })
 
     await roomWorkflows.start(ctx, internal.workflows.expireRoomAfterIdle, {
@@ -280,6 +373,18 @@ export const getRoom = query({
     }
 
     const participants = await roomPresence.list(ctx, parsed.roomCode)
+    const participantProfiles = await ctx.db
+      .query('roomParticipantProfiles')
+      .withIndex('by_room_last_seen', (q: any) => q.eq('roomCode', parsed.roomCode))
+      .order('desc')
+      .collect()
+    const capabilityGrantsBySessionId = await listParticipantCapabilityGrants(
+      ctx,
+      parsed.roomCode,
+    )
+    const onlineBySessionId = new Map(
+      participants.map((participant) => [participant.userId, participant.online]),
+    )
 
     return {
       kind: 'ok' as const,
@@ -295,7 +400,57 @@ export const getRoom = query({
         stageInteractionPolicy: getStageInteractionPolicy(room),
         participantCount: participants.filter((participant) => participant.online)
           .length,
+        participants: participantProfiles.map((participant) => {
+          const capabilities =
+            capabilityGrantsBySessionId.get(participant.sessionId) ?? []
+
+          return {
+            sessionId: participant.sessionId,
+            displayName: participant.displayName,
+            color: participant.color,
+            online: onlineBySessionId.get(participant.sessionId) ?? false,
+            capabilities,
+            canControlStage:
+              participant.sessionId === room.createdBySessionId ||
+              getStageInteractionPolicy(room).kind === 'everyone' ||
+              hasGrantedCapability(capabilities, 'stage_control'),
+          }
+        }),
       },
+    }
+  },
+})
+
+export const upsertParticipantProfile = mutation({
+  args: {
+    roomCode: v.string(),
+    sessionId: v.string(),
+    displayName: v.string(),
+    color: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const participant = {
+      roomCode: roomCodeSchema.parse(args.roomCode),
+      sessionId: sessionIdSchema.parse(args.sessionId),
+      displayName: displayNameSchema.parse(args.displayName),
+      color: colorSchema.parse(args.color),
+    }
+
+    const room = await findRoomByCode(ctx, participant.roomCode)
+    if (!room || room.archived) {
+      throw new ConvexError({
+        code: 'room_not_found',
+        message: 'Room was not found.',
+      })
+    }
+
+    await upsertParticipantProfileRow(ctx, participant)
+    await ctx.db.patch(room._id, {
+      lastActivityAt: Date.now(),
+    })
+
+    return {
+      ok: true,
     }
   },
 })
@@ -372,6 +527,74 @@ export const updateStageInteractionPolicy = mutation({
   },
 })
 
+export const setParticipantCapabilities = mutation({
+  args: {
+    roomCode: v.string(),
+    ownerSessionId: v.string(),
+    ownerSessionSecret: v.string(),
+    participantSessionId: v.string(),
+    capabilities: roomCapabilitiesValidator,
+  },
+  handler: async (ctx, args) => {
+    const roomCode = roomCodeSchema.parse(args.roomCode)
+    const ownerSessionId = sessionIdSchema.parse(args.ownerSessionId)
+    const ownerSessionSecret = ownerSessionSecretSchema.parse(args.ownerSessionSecret)
+    const participantSessionId = sessionIdSchema.parse(args.participantSessionId)
+    const capabilities = roomCapabilitiesSchema.parse(args.capabilities)
+
+    const room = await findRoomByCode(ctx, roomCode)
+
+    if (!room || room.archived) {
+      throw new ConvexError({
+        code: 'room_not_found',
+        message: 'Room was not found.',
+      })
+    }
+
+    await assertOwnerControl(ctx, room, ownerSessionId, ownerSessionSecret)
+
+    if (participantSessionId === room.createdBySessionId) {
+      throw new ConvexError({
+        code: 'invalid_participant',
+        message: 'Owner capabilities are implicit and cannot be edited here.',
+      })
+    }
+
+    const existingGrant = await ctx.db
+      .query('roomCapabilityGrants')
+      .withIndex('by_room_session', (q: any) =>
+        q.eq('roomCode', roomCode).eq('sessionId', participantSessionId),
+      )
+      .first()
+
+    if (capabilities.length === 0) {
+      if (existingGrant) {
+        await ctx.db.delete(existingGrant._id)
+      }
+    } else if (existingGrant) {
+      await ctx.db.patch(existingGrant._id, {
+        capabilities,
+        updatedAt: Date.now(),
+      })
+    } else {
+      await ctx.db.insert('roomCapabilityGrants', {
+        roomCode,
+        sessionId: participantSessionId,
+        capabilities,
+        updatedAt: Date.now(),
+      })
+    }
+
+    await ctx.db.patch(room._id, {
+      lastActivityAt: Date.now(),
+    })
+
+    return {
+      ok: true,
+    }
+  },
+})
+
 export const upsertCursor = mutation({
   args: {
     roomCode: v.string(),
@@ -410,6 +633,13 @@ export const upsertCursor = mutation({
       .first()
 
     const now = Date.now()
+
+    await upsertParticipantProfileRow(ctx, {
+      roomCode: parsed.roomCode,
+      sessionId: parsed.sessionId,
+      displayName: parsed.displayName,
+      color: parsed.color,
+    })
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -466,6 +696,7 @@ export const triggerSound = mutation({
     roomCode: v.string(),
     sessionId: v.string(),
     displayName: v.string(),
+    color: v.string(),
     soundId: v.string(),
   },
   handler: async (ctx, args) => {
@@ -504,6 +735,13 @@ export const triggerSound = mutation({
 
     const createdAt = Date.now()
     const eventId = `${createdAt}-${parsed.sessionId}-${parsed.soundId}`
+
+    await upsertParticipantProfileRow(ctx, {
+      roomCode: parsed.roomCode,
+      sessionId: parsed.sessionId,
+      displayName: parsed.displayName,
+      color: parsed.color,
+    })
 
     await ctx.db.insert('soundboardEvents', {
       eventId,
@@ -578,9 +816,21 @@ export const archiveRoomIfIdle = internalMutation({
       .withIndex('by_room_created', (q) => q.eq('roomCode', roomCode))
       .collect()
 
+    const participantProfiles = await ctx.db
+      .query('roomParticipantProfiles')
+      .withIndex('by_room_last_seen', (q: any) => q.eq('roomCode', roomCode))
+      .collect()
+
+    const capabilityGrants = await ctx.db
+      .query('roomCapabilityGrants')
+      .withIndex('by_room_updated', (q: any) => q.eq('roomCode', roomCode))
+      .collect()
+
     await Promise.all([
       ...cursors.map((cursor) => ctx.db.delete(cursor._id)),
       ...sounds.map((sound) => ctx.db.delete(sound._id)),
+      ...participantProfiles.map((participant) => ctx.db.delete(participant._id)),
+      ...capabilityGrants.map((grant) => ctx.db.delete(grant._id)),
     ])
 
     return { archived: true }

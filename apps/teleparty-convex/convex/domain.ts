@@ -18,6 +18,19 @@ export const soundIdSchema = z.enum([
 
 export type SoundId = z.infer<typeof soundIdSchema>
 
+export const roomCapabilitySchema = z.enum([
+  'stage_control',
+  'soundboard',
+  'draw',
+])
+
+export const roomCapabilitiesSchema = z
+  .array(roomCapabilitySchema)
+  .max(8)
+  .transform((values) => Array.from(new Set(values)))
+
+export type RoomCapability = z.infer<typeof roomCapabilitySchema>
+
 export const ownerSessionSecretSchema = z
   .string()
   .trim()
@@ -117,6 +130,7 @@ export const createRoomSchema = z.object({
   ownerSessionId: sessionIdSchema,
   ownerSessionSecret: ownerSessionSecretSchema,
   ownerDisplayName: displayNameSchema,
+  ownerColor: colorSchema,
   visibility: roomVisibilitySchema,
   soundboardPolicy: soundboardPolicySchema,
   stageInteractionPolicy: stageInteractionPolicySchema,
@@ -140,6 +154,7 @@ export const triggerSoundSchema = z.object({
   roomCode: roomCodeSchema,
   sessionId: sessionIdSchema,
   displayName: displayNameSchema,
+  color: colorSchema,
   soundId: soundIdSchema,
 })
 

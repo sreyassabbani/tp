@@ -96,6 +96,7 @@ function RouteComponent() {
         ownerSessionId: sessionProfile.sessionId,
         ownerSessionSecret: sessionProfile.sessionSecret,
         ownerDisplayName: sessionProfile.displayName,
+        ownerColor: sessionProfile.color,
         visibility: parsed.visibility,
         soundboardPolicy: parsed.soundboardPolicy,
         stageInteractionPolicy: parsed.stageInteractionPolicy,

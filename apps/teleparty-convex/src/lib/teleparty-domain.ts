@@ -13,6 +13,17 @@ export const soundIdSchema = z.enum([
   'whoosh',
 ])
 
+export const roomCapabilitySchema = z.enum([
+  'stage_control',
+  'soundboard',
+  'draw',
+])
+
+export const roomCapabilitiesSchema = z
+  .array(roomCapabilitySchema)
+  .max(8)
+  .transform((values) => Array.from(new Set(values)))
+
 export const roomCodeSchema = z
   .string()
   .trim()
@@ -62,9 +73,10 @@ export const stageInteractionPolicySchema = z.discriminatedUnion('kind', [
 ])
 
 export type StageInteractionPolicy = z.infer<typeof stageInteractionPolicySchema>
+export type RoomCapability = z.infer<typeof roomCapabilitySchema>
 
 export const DEFAULT_STAGE_INTERACTION_POLICY: StageInteractionPolicy = {
-  kind: 'owner_only',
+  kind: 'everyone',
 }
 
 export const watchUrlSchema = z
@@ -119,8 +131,13 @@ export function canUseSoundboard(
 export function canInteractWithStage(
   policy: StageInteractionPolicy,
   isOwner: boolean,
+  capabilities: RoomCapability[] = [],
 ): boolean {
-  return isOwner || policy.kind === 'everyone'
+  return (
+    isOwner ||
+    policy.kind === 'everyone' ||
+    capabilities.includes('stage_control')
+  )
 }
 
 const YOUTUBE_HOSTS = new Set([

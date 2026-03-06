@@ -22,6 +22,7 @@ import {
   canUseSoundboard,
   getWatchFrameUrl,
   normalizeRoomCode,
+  type RoomCapability,
   type StageInteractionPolicy,
   type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
@@ -78,6 +79,11 @@ function RoomRoute() {
 
   const [soundError, setSoundError] = useState<string | null>(null)
   const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [participantAccessError, setParticipantAccessError] = useState<string | null>(
+    null,
+  )
+  const [updatingParticipantSessionId, setUpdatingParticipantSessionId] =
+    useState<string | null>(null)
   const [stageMode, setStageMode] = useState<'cursor' | 'interact'>('cursor')
 
   const roomCode = useMemo(() => {
@@ -119,9 +125,13 @@ function RoomRoute() {
 
   const upsertCursor = useMutation(api.rooms.upsertCursor)
   const triggerSound = useMutation(api.rooms.triggerSound)
+  const upsertParticipantProfile = useMutation(api.rooms.upsertParticipantProfile)
   const updateSoundboardPolicy = useMutation(api.rooms.updateSoundboardPolicy)
   const updateStageInteractionPolicy = useMutation(
     api.rooms.updateStageInteractionPolicy,
+  )
+  const setParticipantCapabilities = useMutation(
+    api.rooms.setParticipantCapabilities,
   )
 
   const presenceRoomId =
@@ -238,6 +248,45 @@ function RoomRoute() {
     }
   }, [soundEvents])
 
+  useEffect(() => {
+    if (!roomCode || roomLookup?.kind !== 'ok') {
+      return
+    }
+
+    const activeRoomCode = roomCode
+    let cancelled = false
+
+    async function syncParticipantProfile() {
+      try {
+        await upsertParticipantProfile({
+          roomCode: activeRoomCode,
+          sessionId: sessionProfile.sessionId,
+          displayName: sessionProfile.displayName,
+          color: sessionProfile.color,
+        })
+      } catch {
+        if (!cancelled) {
+          // Ignore transient heartbeat errors; the next sync will retry.
+        }
+      }
+    }
+
+    void syncParticipantProfile()
+    const interval = window.setInterval(syncParticipantProfile, 20_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [
+    roomCode,
+    roomLookup?.kind,
+    sessionProfile.color,
+    sessionProfile.displayName,
+    sessionProfile.sessionId,
+    upsertParticipantProfile,
+  ])
+
   const cursorContainerRef = useRef<HTMLDivElement | null>(null)
   const lastCursorUpdateAt = useRef(0)
 
@@ -286,6 +335,7 @@ function RoomRoute() {
         roomCode,
         sessionId: sessionProfile.sessionId,
         displayName: sessionProfile.displayName,
+        color: sessionProfile.color,
         soundId,
       })
       setSoundError(null)
@@ -295,6 +345,40 @@ function RoomRoute() {
       } else {
         setSoundError('Sound request failed.')
       }
+    }
+  }
+
+  async function onToggleParticipantStageControl(participant: {
+    sessionId: string
+    capabilities: RoomCapability[]
+  }) {
+    if (!roomCode || roomLookup?.kind !== 'ok') {
+      return
+    }
+
+    const hasStageControl = participant.capabilities.includes('stage_control')
+    const nextCapabilities = hasStageControl
+      ? participant.capabilities.filter((capability) => capability !== 'stage_control')
+      : [...participant.capabilities, 'stage_control']
+
+    try {
+      setUpdatingParticipantSessionId(participant.sessionId)
+      await setParticipantCapabilities({
+        roomCode,
+        ownerSessionId: sessionProfile.sessionId,
+        ownerSessionSecret: sessionProfile.sessionSecret,
+        participantSessionId: participant.sessionId,
+        capabilities: nextCapabilities,
+      })
+      setParticipantAccessError(null)
+    } catch (unknownError) {
+      if (unknownError instanceof Error) {
+        setParticipantAccessError(unknownError.message)
+      } else {
+        setParticipantAccessError('Failed to update participant access.')
+      }
+    } finally {
+      setUpdatingParticipantSessionId(null)
     }
   }
 
@@ -342,9 +426,20 @@ function RoomRoute() {
   const isOwner =
     roomLookup?.kind === 'ok' &&
     roomLookup.room.createdBySessionId === sessionProfile.sessionId
+  const selfParticipant =
+    roomLookup?.kind === 'ok'
+      ? roomLookup.room.participants.find(
+          (participant) => participant.sessionId === sessionProfile.sessionId,
+        ) ?? null
+      : null
+  const selfCapabilities = selfParticipant?.capabilities ?? []
   const canUseStageInteraction =
     roomLookup?.kind === 'ok'
-      ? canInteractWithStage(roomLookup.room.stageInteractionPolicy, isOwner)
+      ? canInteractWithStage(
+          roomLookup.room.stageInteractionPolicy,
+          isOwner,
+          selfCapabilities,
+        )
       : false
   const stageIsInteractive = canUseStageInteraction && stageMode === 'interact'
 
@@ -362,7 +457,7 @@ function RoomRoute() {
     ? 'Video controls are active. Shared cursor tracking pauses while you click inside the embed.'
     : canUseStageInteraction
       ? 'Cursor mode is active. Switch to video controls when you need to click play, pause, or scrub.'
-      : 'Direct video controls are reserved for the room owner right now. Use Open Watch Link to interact in a new tab.'
+      : 'This browser does not currently have direct video control. Ask the room owner for access or use Open Watch Link in a new tab.'
 
   if (!roomCode) {
     return (
@@ -445,6 +540,14 @@ function RoomRoute() {
     room.soundboardPolicy,
     onlineParticipantCount,
   )
+  const manageableParticipants = room.participants
+    .filter((participant) => participant.sessionId !== room.createdBySessionId)
+    .sort((left, right) => {
+      if (left.online !== right.online) {
+        return left.online ? -1 : 1
+      }
+      return left.displayName.localeCompare(right.displayName)
+    })
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
@@ -492,7 +595,7 @@ function RoomRoute() {
                   {stageIsInteractive ? 'Back To Cursor Mode' : 'Use Video Controls'}
                 </Button>
               ) : (
-                <Badge variant="secondary">Owner-only video controls</Badge>
+                <Badge variant="secondary">Video controls locked</Badge>
               )}
               <p className="m-0 text-xs text-muted-foreground">
                 {stageIsInteractive
@@ -664,6 +767,71 @@ function RoomRoute() {
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-3">
+                  <div>
+                    <p className="m-0 text-sm font-semibold">Participant Access</p>
+                    <p className="m-0 text-xs text-muted-foreground">
+                      Grant direct stage control to specific guests when room-wide
+                      guest controls are off.
+                    </p>
+                  </div>
+
+                  {manageableParticipants.length === 0 ? (
+                    <p className="m-0 text-xs text-muted-foreground">
+                      Participants appear here after they join the room.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {manageableParticipants.map((participant) => {
+                        const hasStageControl = participant.capabilities.includes(
+                          'stage_control',
+                        )
+
+                        return (
+                          <div
+                            key={participant.sessionId}
+                            className="flex items-center justify-between rounded-lg border border-border/60 bg-background/70 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-flex size-2 rounded-full"
+                                  style={{ backgroundColor: participant.color }}
+                                />
+                                <p className="m-0 truncate text-sm font-medium">
+                                  {participant.displayName}
+                                </p>
+                                <Badge
+                                  variant={participant.online ? 'default' : 'secondary'}
+                                >
+                                  {participant.online ? 'online' : 'offline'}
+                                </Badge>
+                              </div>
+                              <p className="m-0 text-xs text-muted-foreground">
+                                {effectiveStagePolicy?.kind === 'everyone'
+                                  ? 'Room-wide guest controls are on. Individual grants are stored but not needed right now.'
+                                  : hasStageControl
+                                    ? 'Has direct stage control when guests are otherwise locked.'
+                                    : 'No direct stage control.'}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={hasStageControl}
+                              disabled={
+                                effectiveStagePolicy?.kind === 'everyone' ||
+                                updatingParticipantSessionId === participant.sessionId
+                              }
+                              onCheckedChange={() =>
+                                onToggleParticipantStageControl(participant)
+                              }
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/40 px-3 py-3">
                   <div className="flex items-center justify-between text-sm">
                     <span>Max participants</span>
                     <span className="font-semibold">
@@ -712,6 +880,12 @@ function RoomRoute() {
                 {settingsError ? (
                   <p className="m-0 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                     {settingsError}
+                  </p>
+                ) : null}
+
+                {participantAccessError ? (
+                  <p className="m-0 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {participantAccessError}
                   </p>
                 ) : null}
               </CardContent>

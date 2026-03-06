@@ -1,5 +1,7 @@
 # Teleparty Clone Lab (Convex + SpacetimeDB)
 
+Documentation vault: `docs/index.md`
+
 This repo contains two side-by-side implementations of the same Teleparty-style product:
 
 - `apps/teleparty-convex` : TanStack Start + shadcn + Convex (with Presence, Rate Limiter, Workflow components)

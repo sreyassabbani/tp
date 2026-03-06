@@ -36,6 +36,7 @@ const MAX_CURSOR_ROWS = 300
 const MAX_SOUND_EVENTS = 120
 const MAX_PARTICIPANT_ROWS = 120
 const CURSOR_STALE_MS = 15_000
+const ROOM_ACTIVITY_HEARTBEAT_MS = 60_000
 const DEFAULT_STAGE_INTERACTION_POLICY: StageInteractionPolicy = {
   kind: 'everyone',
 }
@@ -445,9 +446,13 @@ export const upsertParticipantProfile = mutation({
     }
 
     await upsertParticipantProfileRow(ctx, participant)
-    await ctx.db.patch(room._id, {
-      lastActivityAt: Date.now(),
-    })
+    const now = Date.now()
+
+    if (room.lastActivityAt < now - ROOM_ACTIVITY_HEARTBEAT_MS) {
+      await ctx.db.patch(room._id, {
+        lastActivityAt: now,
+      })
+    }
 
     return {
       ok: true,
@@ -633,13 +638,6 @@ export const upsertCursor = mutation({
       .first()
 
     const now = Date.now()
-
-    await upsertParticipantProfileRow(ctx, {
-      roomCode: parsed.roomCode,
-      sessionId: parsed.sessionId,
-      displayName: parsed.displayName,
-      color: parsed.color,
-    })
 
     if (existing) {
       await ctx.db.patch(existing._id, {

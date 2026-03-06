@@ -12,6 +12,26 @@ TanStack Start + shadcn UI + SpacetimeDB v2.0 TypeScript module.
 
 ## Local run
 
+Recommended:
+
+```bash
+cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
+direnv exec /Users/sreysus/workflow/tp bun install
+direnv exec /Users/sreysus/workflow/tp bun --cwd spacetimedb install
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+```
+
+`spacetime:dev` uses a repo wrapper around the Spacetime CLI to:
+
+- start the local SpacetimeDB server
+- publish the module
+- generate TypeScript bindings
+- keep the module watcher running
+- refresh bindings when module source changes
+- run the Vite web app
+
+Manual fallback:
+
 1) Start local SpacetimeDB server:
 
 ```bash

@@ -18,6 +18,15 @@ apps/teleparty-spacetime/src/module_bindings/       # generated TS bindings
 apps/teleparty-spacetime/src/integrations/spacetime/provider.tsx
 ```
 
+Recommended local dev entry point:
+
+```bash
+cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+```
+
+That wraps the Spacetime CLI into one repo-level command instead of making you run server, publish/generate, and web in separate terminals.
+
 ---
 
 ## Public Tables

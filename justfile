@@ -17,8 +17,14 @@ convex-backend:
 convex-web:
   cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun run dev
 
+convex-dev:
+  {{root}}/scripts/dev/convex.sh
+
 convex-build:
   cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun run build
+
+spacetime-dev:
+  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:dev
 
 spacetime-db:
   cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:start

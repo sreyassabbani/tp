@@ -38,14 +38,26 @@ cd /Users/sreysus/workflow/tp
 just bootstrap
 ```
 
-Convex flow (two terminals):
+Convex flow (recommended, one terminal):
+
+```bash
+just convex-dev
+```
+
+Convex flow (manual / advanced split):
 
 ```bash
 just convex-backend
 just convex-web
 ```
 
-Spacetime flow (three terminals):
+Spacetime flow (recommended, one terminal):
+
+```bash
+just spacetime-dev
+```
+
+Spacetime flow (manual / advanced split):
 
 ```bash
 just spacetime-db
@@ -62,14 +74,31 @@ just build-all
 Command/process summary:
 
 - `just bootstrap`: installs Bun dependencies in all relevant packages.
+- `just convex-dev`: starts Convex backend sync, waits for the generated local URL, and then starts the web client on port `3001`.
 - `just convex-backend`: starts Convex backend/dev sync and keeps `.env.local` endpoints current.
 - `just convex-web`: starts the Convex web client on port `3001`.
+- `just spacetime-dev`: starts local SpacetimeDB dev mode, republishes/regenerates on changes, and runs the web client on port `3002`.
 - `just spacetime-db`: starts local SpacetimeDB on `127.0.0.1:3010` with data in `.spacetime/data`.
 - `just spacetime-sync`: publishes the Spacetime module and regenerates typed bindings.
 - `just spacetime-web`: starts the Spacetime web client on port `3002`.
 - `just build-all`: runs production builds for both implementations.
 
 ### Convex version
+
+Recommended:
+
+```bash
+cd /Users/sreysus/workflow/tp
+just convex-dev
+```
+
+Why this is simpler:
+
+- it runs backend sync and the web app together
+- it waits for Convex to write `VITE_CONVEX_URL` before starting Vite
+- it keeps the old split commands available when you want to inspect each process separately
+
+Manual fallback:
 
 Terminal 1:
 
@@ -89,6 +118,22 @@ direnv exec /Users/sreysus/workflow/tp bun run dev
 App URL: `http://localhost:3001`
 
 ### SpacetimeDB version
+
+Recommended:
+
+```bash
+cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+```
+
+Why this is simpler:
+
+- it starts the local SpacetimeDB server if needed
+- it does the initial publish and binding generation for you
+- it keeps background publish and binding-refresh loops running on module changes
+- it runs the Vite web app from the same entry point
+
+Manual fallback:
 
 Terminal 1 (local database server):
 

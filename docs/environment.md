@@ -61,6 +61,15 @@ Defaults in code:
 Spacetime local data directory:
 - `apps/teleparty-spacetime/.spacetime/data`
 
+Recommended local entry point:
+
+```bash
+cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
+direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+```
+
+That command handles the usual local server/publish/generate/run sequence for you from one entry point.
+
 If local publish/auth state gets corrupted, removing that data directory and restarting is the usual reset path.
 
 ---

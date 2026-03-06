@@ -24,7 +24,7 @@ import {
   createRoomInputSchema,
   type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
-import { loadSessionProfile, saveSessionProfile } from '#/lib/session'
+import { useSessionProfile } from '#/lib/session'
 
 export const Route = createFileRoute('/')({ component: RouteComponent })
 
@@ -35,8 +35,8 @@ function RouteComponent() {
   const connectionState = useSpacetimeDB()
   const createRoom = useReducer(reducers.createRoom)
 
-  const [rooms] = useTable(tables.room)
-  const [participants] = useTable(tables.participant)
+  const [rooms, roomsReady] = useTable(tables.room)
+  const [participants, participantsReady] = useTable(tables.participant)
 
   const publicRooms = useMemo(() => {
     return [...rooms]
@@ -52,7 +52,7 @@ function RouteComponent() {
     return map
   }, [participants])
 
-  const [sessionProfile, setSessionProfile] = useState(() => loadSessionProfile())
+  const { sessionProfile, setSessionProfile, isHydrated } = useSessionProfile()
 
   const [watchUrl, setWatchUrl] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -80,6 +80,14 @@ function RouteComponent() {
     setIsSubmitting(true)
 
     try {
+      if (connectionState.connectionError) {
+        throw connectionState.connectionError
+      }
+
+      if (!connectionState.isActive) {
+        throw new Error('SpacetimeDB is still connecting. Retry in a moment.')
+      }
+
       const parsed = createRoomInputSchema.parse({
         watchUrl,
         visibility: isPrivate
@@ -105,6 +113,10 @@ function RouteComponent() {
 
       if (!roomCode) {
         throw new Error('Failed to generate unique room code. Retry.')
+      }
+
+      if (!isHydrated) {
+        throw new Error('Session is still loading. Retry in a moment.')
       }
 
       await createRoom({
@@ -144,7 +156,7 @@ function RouteComponent() {
 
   function updateDisplayName(value: string) {
     setSessionProfile((current) =>
-      saveSessionProfile({
+      ({
         ...current,
         displayName: value,
       }),
@@ -310,7 +322,11 @@ function RouteComponent() {
                 </p>
               ) : null}
 
-              <Button disabled={isSubmitting} className="w-full" type="submit">
+              <Button
+                disabled={isSubmitting || !isHydrated}
+                className="w-full"
+                type="submit"
+              >
                 {isSubmitting ? 'Creating room...' : 'Create Room'}
               </Button>
             </form>
@@ -338,8 +354,18 @@ function RouteComponent() {
 
             <div className="space-y-2 text-xs text-muted-foreground">
               <p className="m-0">
-                Connection: {connectionState.isActive ? 'active' : 'connecting'}
+                Connection:{' '}
+                {connectionState.connectionError
+                  ? 'error'
+                  : connectionState.isActive
+                    ? 'active'
+                    : 'connecting'}
               </p>
+              {connectionState.connectionError ? (
+                <p className="m-0 text-destructive">
+                  {connectionState.connectionError.message}
+                </p>
+              ) : null}
               <p className="m-0">
                 Session ID: <code>{sessionProfile.sessionId}</code>
               </p>
@@ -360,6 +386,11 @@ function RouteComponent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {!roomsReady || !participantsReady ? (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Syncing live room list...
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {publicRooms.map((room) => (
               <button

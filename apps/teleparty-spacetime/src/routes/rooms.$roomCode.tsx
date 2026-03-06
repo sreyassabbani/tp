@@ -22,7 +22,7 @@ import {
   normalizeRoomCode,
   type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
-import { loadSessionProfile } from '#/lib/session'
+import { useSessionProfile } from '#/lib/session'
 import { playSound, sounds } from '#/lib/soundboard'
 
 export const Route = createFileRoute('/rooms/$roomCode')({
@@ -93,7 +93,7 @@ function soundboardPolicyToReducerInput(policy: SoundboardPolicy): {
 
 function RoomRoute() {
   const params = Route.useParams()
-  const sessionProfile = useMemo(() => loadSessionProfile(), [])
+  const { sessionProfile, isHydrated } = useSessionProfile()
 
   const joinRoom = useReducer(reducers.joinRoom)
   const leaveRoom = useReducer(reducers.leaveRoom)
@@ -124,15 +124,15 @@ function RoomRoute() {
 
   const activeRoomCode = roomCode ?? '__invalid_room__'
 
-  const [roomRows] = useTable(
+  const [roomRows, roomRowsReady] = useTable(
     tables.room.where((room) => room.roomCode.eq(activeRoomCode)),
   )
 
-  const [participantRows] = useTable(
+  const [participantRows, participantRowsReady] = useTable(
     tables.participant.where((participant) => participant.roomCode.eq(activeRoomCode)),
   )
 
-  const [soundRows] = useTable(
+  const [soundRows, soundRowsReady] = useTable(
     tables.soundEvent.where((soundEvent) => soundEvent.roomCode.eq(activeRoomCode)),
   )
 
@@ -206,7 +206,7 @@ function RoomRoute() {
   const joiningRef = useRef(false)
 
   useEffect(() => {
-    if (!room || hasJoined || joiningRef.current) {
+    if (!isHydrated || !room || hasJoined || joiningRef.current) {
       return
     }
 
@@ -234,6 +234,7 @@ function RoomRoute() {
       })
   }, [
     hasJoined,
+    isHydrated,
     joinRoom,
     room,
     sessionProfile.color,
@@ -259,14 +260,14 @@ function RoomRoute() {
 
   useEffect(() => {
     return () => {
-      if (!roomCode || !hasJoined) {
+      if (!isHydrated || !roomCode || !hasJoined) {
         return
       }
       leaveRoom({ roomCode, sessionId: sessionProfile.sessionId }).catch(() => {
         // ignore on unmount
       })
     }
-  }, [hasJoined, leaveRoom, roomCode, sessionProfile.sessionId])
+  }, [hasJoined, isHydrated, leaveRoom, roomCode, sessionProfile.sessionId])
 
   const seenSoundEvents = useRef<Set<string>>(new Set())
 
@@ -352,7 +353,7 @@ function RoomRoute() {
 
   async function onPrivateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!roomCode || !room) {
+    if (!isHydrated || !roomCode || !room) {
       return
     }
 
@@ -389,6 +390,21 @@ function RoomRoute() {
   }
 
   if (!room) {
+    if (!roomRowsReady) {
+      return (
+        <main className="mx-auto w-full max-w-4xl px-4 py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Loading room</CardTitle>
+              <CardDescription>
+                Waiting for the room subscription to sync.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </main>
+      )
+    }
+
     return (
       <main className="mx-auto w-full max-w-4xl px-4 py-8">
         <Card>
@@ -480,6 +496,11 @@ function RoomRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {!participantRowsReady || !soundRowsReady ? (
+              <p className="mb-3 text-sm text-muted-foreground">
+                Syncing live room state...
+              </p>
+            ) : null}
             <div
               ref={cursorContainerRef}
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"

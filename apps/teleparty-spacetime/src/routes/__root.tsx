@@ -25,6 +25,9 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
+const showTanStackDevtools =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_TANSTACK_DEVTOOLS === 'true'
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -38,17 +41,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <Header />
             {children}
             <Footer />
-            <TanStackDevtools
-              config={{
-                position: 'bottom-right',
-              }}
-              plugins={[
-                {
-                  name: 'TanStack Router',
-                  render: <TanStackRouterDevtoolsPanel />,
-                },
-              ]}
-            />
+            {showTanStackDevtools ? (
+              <TanStackDevtools
+                config={{
+                  position: 'bottom-right',
+                }}
+                plugins={[
+                  {
+                    name: 'TanStack Router',
+                    render: <TanStackRouterDevtoolsPanel />,
+                  },
+                ]}
+              />
+            ) : null}
           </div>
         </AppSpacetimeProvider>
         <Scripts />

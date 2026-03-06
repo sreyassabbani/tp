@@ -1,3 +1,4 @@
+import { useEffect, useState, type SetStateAction } from 'react'
 import { customAlphabet } from 'nanoid'
 import { z } from 'zod'
 
@@ -27,6 +28,12 @@ const nouns = ['Otter', 'Comet', 'Fox', 'Sparrow', 'Panda', 'Lynx', 'Tiger']
 
 const palette = ['#f97316', '#0ea5e9', '#22c55e', '#ef4444', '#f59e0b', '#14b8a6']
 
+const initialSessionProfile: SessionProfile = {
+  sessionId: 'pending-session-id',
+  displayName: 'Guest Otter',
+  color: '#14b8a6',
+}
+
 function randomItem<T>(values: readonly T[]): T {
   return values[Math.floor(Math.random() * values.length)]
 }
@@ -41,7 +48,7 @@ function createDefaultProfile(): SessionProfile {
 
 export function loadSessionProfile(): SessionProfile {
   if (typeof window === 'undefined') {
-    return createDefaultProfile()
+    return initialSessionProfile
   }
 
   const raw = window.localStorage.getItem(storageKey)
@@ -69,4 +76,29 @@ export function saveSessionProfile(profile: SessionProfile): SessionProfile {
   }
 
   return parsed
+}
+
+export function useSessionProfile() {
+  const [sessionProfile, setSessionProfile] =
+    useState<SessionProfile>(initialSessionProfile)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  useEffect(() => {
+    setSessionProfile(loadSessionProfile())
+    setIsHydrated(true)
+  }, [])
+
+  function updateSessionProfile(nextValue: SetStateAction<SessionProfile>) {
+    setSessionProfile((current) => {
+      const nextProfile =
+        typeof nextValue === 'function' ? nextValue(current) : nextValue
+      return saveSessionProfile(nextProfile)
+    })
+  }
+
+  return {
+    sessionProfile,
+    setSessionProfile: updateSessionProfile,
+    isHydrated,
+  }
 }

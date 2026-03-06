@@ -4,6 +4,15 @@ export const DEFAULT_AUTO_SOUNDBOARD_CAPACITY = 8
 export const MIN_SOUNDBOARD_CAPACITY = 2
 export const MAX_SOUNDBOARD_CAPACITY = 64
 
+export const soundIdSchema = z.enum([
+  'airhorn',
+  'rimshot',
+  'cheer',
+  'boo',
+  'ta-da',
+  'whoosh',
+])
+
 export const roomCodeSchema = z
   .string()
   .trim()
@@ -43,6 +52,21 @@ export const soundboardPolicySchema = z.discriminatedUnion('kind', [
   }),
 ])
 
+export const stageInteractionPolicySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('owner_only'),
+  }),
+  z.object({
+    kind: z.literal('everyone'),
+  }),
+])
+
+export type StageInteractionPolicy = z.infer<typeof stageInteractionPolicySchema>
+
+export const DEFAULT_STAGE_INTERACTION_POLICY: StageInteractionPolicy = {
+  kind: 'owner_only',
+}
+
 export const watchUrlSchema = z
   .string()
   .trim()
@@ -59,6 +83,7 @@ export const createRoomInputSchema = z.object({
   watchUrl: watchUrlSchema,
   visibility: visibilitySchema,
   soundboardPolicy: soundboardPolicySchema,
+  stageInteractionPolicy: stageInteractionPolicySchema,
 })
 
 export const roomJoinInputSchema = z.object({
@@ -68,6 +93,7 @@ export const roomJoinInputSchema = z.object({
 
 export type Visibility = z.infer<typeof visibilitySchema>
 export type SoundboardPolicy = z.infer<typeof soundboardPolicySchema>
+export type SoundId = z.infer<typeof soundIdSchema>
 
 export function normalizeAccessCode(value?: string): string {
   if (!value) {
@@ -88,6 +114,13 @@ export function canUseSoundboard(
     return participantCount <= policy.defaultMaxParticipants
   }
   return policy.enabled && participantCount <= policy.maxParticipants
+}
+
+export function canInteractWithStage(
+  policy: StageInteractionPolicy,
+  isOwner: boolean,
+): boolean {
+  return isOwner || policy.kind === 'everyone'
 }
 
 const YOUTUBE_HOSTS = new Set([

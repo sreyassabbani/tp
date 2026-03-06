@@ -23,6 +23,15 @@ const soundboardPolicyValidator = v.union(
   }),
 )
 
+const stageInteractionPolicyValidator = v.union(
+  v.object({
+    kind: v.literal('owner_only'),
+  }),
+  v.object({
+    kind: v.literal('everyone'),
+  }),
+)
+
 export default defineSchema({
   rooms: defineTable({
     roomCode: v.string(),
@@ -31,9 +40,11 @@ export default defineSchema({
     createdAt: v.number(),
     lastActivityAt: v.number(),
     createdBySessionId: v.string(),
+    ownerSessionSecret: v.optional(v.string()),
     createdByDisplayName: v.string(),
     visibility: visibilityValidator,
     soundboardPolicy: soundboardPolicyValidator,
+    stageInteractionPolicy: v.optional(stageInteractionPolicyValidator),
     archived: v.boolean(),
     archivedAt: v.optional(v.number()),
   })

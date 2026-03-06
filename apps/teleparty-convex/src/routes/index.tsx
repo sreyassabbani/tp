@@ -20,6 +20,7 @@ import { Slider } from '#/components/ui/slider'
 import { Switch } from '#/components/ui/switch'
 import {
   DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
+  DEFAULT_STAGE_INTERACTION_POLICY,
   createRoomInputSchema,
   type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
@@ -87,14 +88,17 @@ function RouteComponent() {
               kind: 'public',
             },
         soundboardPolicy: draftSoundboardPolicy,
+        stageInteractionPolicy: DEFAULT_STAGE_INTERACTION_POLICY,
       })
 
       const created = await createRoom({
         watchUrl: parsed.watchUrl,
         ownerSessionId: sessionProfile.sessionId,
+        ownerSessionSecret: sessionProfile.sessionSecret,
         ownerDisplayName: sessionProfile.displayName,
         visibility: parsed.visibility,
         soundboardPolicy: parsed.soundboardPolicy,
+        stageInteractionPolicy: parsed.stageInteractionPolicy,
       })
 
       await navigate({
@@ -293,7 +297,8 @@ function RouteComponent() {
           <CardHeader>
             <CardTitle>Your Session</CardTitle>
             <CardDescription>
-              Stored locally and used for ownership and cursor identity.
+              Stored locally and used as this browser&apos;s anonymous ownership key
+              and cursor identity.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -314,6 +319,10 @@ function RouteComponent() {
               </p>
               <p className="m-0">
                 Cursor color: <code>{sessionProfile.color}</code>
+              </p>
+              <p className="m-0">
+                Clearing local storage on this browser drops owner access for new
+                rooms.
               </p>
             </div>
           </CardContent>

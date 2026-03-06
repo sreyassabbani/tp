@@ -18,6 +18,13 @@ export const soundIdSchema = z.enum([
 
 export type SoundId = z.infer<typeof soundIdSchema>
 
+export const ownerSessionSecretSchema = z
+  .string()
+  .trim()
+  .min(24)
+  .max(64)
+  .regex(/^[a-z0-9]+$/)
+
 export const roomCodeSchema = z
   .string()
   .trim()
@@ -94,12 +101,25 @@ export const soundboardPolicySchema = z.discriminatedUnion('kind', [
   }),
 ])
 
+export const stageInteractionPolicySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('owner_only'),
+  }),
+  z.object({
+    kind: z.literal('everyone'),
+  }),
+])
+
+export type StageInteractionPolicy = z.infer<typeof stageInteractionPolicySchema>
+
 export const createRoomSchema = z.object({
   watchUrl: watchUrlSchema,
   ownerSessionId: sessionIdSchema,
+  ownerSessionSecret: ownerSessionSecretSchema,
   ownerDisplayName: displayNameSchema,
   visibility: roomVisibilitySchema,
   soundboardPolicy: soundboardPolicySchema,
+  stageInteractionPolicy: stageInteractionPolicySchema,
 })
 
 export const roomLookupSchema = z.object({

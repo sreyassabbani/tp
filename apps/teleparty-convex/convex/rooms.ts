@@ -4,14 +4,17 @@ import { ConvexError, v } from 'convex/values'
 import {
   DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
   ROOM_CODE_LENGTH,
+  type StageInteractionPolicy,
   canUseSoundboard,
   createRoomSchema,
   cursorUpdateSchema,
   normalizeAccessCode,
+  ownerSessionSecretSchema,
   roomCodeSchema,
   roomLookupSchema,
   sessionIdSchema,
   soundboardPolicySchema,
+  stageInteractionPolicySchema,
   triggerSoundSchema,
 } from './domain'
 import { components, internal } from './_generated/api'
@@ -28,6 +31,9 @@ const MAX_PUBLIC_ROOMS = 24
 const MAX_CURSOR_ROWS = 300
 const MAX_SOUND_EVENTS = 120
 const CURSOR_STALE_MS = 15_000
+const DEFAULT_STAGE_INTERACTION_POLICY: StageInteractionPolicy = {
+  kind: 'owner_only',
+}
 
 const visibilityValidator = v.union(
   v.object({
@@ -48,6 +54,15 @@ const soundboardPolicyValidator = v.union(
     kind: v.literal('manual'),
     enabled: v.boolean(),
     maxParticipants: v.number(),
+  }),
+)
+
+const stageInteractionPolicyValidator = v.union(
+  v.object({
+    kind: v.literal('owner_only'),
+  }),
+  v.object({
+    kind: v.literal('everyone'),
   }),
 )
 
@@ -120,21 +135,59 @@ async function trimSoundEvents(ctx: any, roomCode: string): Promise<void> {
   )
 }
 
+function getStageInteractionPolicy(room: {
+  stageInteractionPolicy?: StageInteractionPolicy
+}): StageInteractionPolicy {
+  return room.stageInteractionPolicy ?? DEFAULT_STAGE_INTERACTION_POLICY
+}
+
+async function assertOwnerControl(
+  ctx: any,
+  room: any,
+  ownerSessionId: string,
+  ownerSessionSecret: string,
+): Promise<void> {
+  if (room.createdBySessionId !== ownerSessionId) {
+    throw new ConvexError({
+      code: 'not_owner',
+      message: 'Only the room owner can update room settings.',
+    })
+  }
+
+  if (room.ownerSessionSecret && room.ownerSessionSecret !== ownerSessionSecret) {
+    throw new ConvexError({
+      code: 'not_owner',
+      message: 'This browser does not hold the owner key for this room.',
+    })
+  }
+
+  if (!room.ownerSessionSecret || !room.stageInteractionPolicy) {
+    await ctx.db.patch(room._id, {
+      ownerSessionSecret,
+      stageInteractionPolicy: getStageInteractionPolicy(room),
+    })
+  }
+}
+
 export const createRoom = mutation({
   args: {
     watchUrl: v.string(),
     ownerSessionId: v.string(),
+    ownerSessionSecret: v.string(),
     ownerDisplayName: v.string(),
     visibility: visibilityValidator,
     soundboardPolicy: soundboardPolicyValidator,
+    stageInteractionPolicy: stageInteractionPolicyValidator,
   },
   handler: async (ctx, args) => {
     const parsed = createRoomSchema.parse({
       watchUrl: args.watchUrl,
       ownerSessionId: args.ownerSessionId,
+      ownerSessionSecret: args.ownerSessionSecret,
       ownerDisplayName: args.ownerDisplayName,
       visibility: args.visibility,
       soundboardPolicy: args.soundboardPolicy,
+      stageInteractionPolicy: args.stageInteractionPolicy,
     })
 
     const roomCode = await createUniqueRoomCode(ctx)
@@ -149,9 +202,11 @@ export const createRoom = mutation({
       createdAt: now,
       lastActivityAt: now,
       createdBySessionId: parsed.ownerSessionId,
+      ownerSessionSecret: parsed.ownerSessionSecret,
       createdByDisplayName: parsed.ownerDisplayName,
       visibility: parsed.visibility,
       soundboardPolicy: parsed.soundboardPolicy,
+      stageInteractionPolicy: parsed.stageInteractionPolicy,
       archived: false,
     })
 
@@ -237,6 +292,7 @@ export const getRoom = query({
         createdBySessionId: room.createdBySessionId,
         visibility: room.visibility,
         soundboardPolicy: room.soundboardPolicy,
+        stageInteractionPolicy: getStageInteractionPolicy(room),
         participantCount: participants.filter((participant) => participant.online)
           .length,
       },
@@ -248,11 +304,13 @@ export const updateSoundboardPolicy = mutation({
   args: {
     roomCode: v.string(),
     ownerSessionId: v.string(),
+    ownerSessionSecret: v.string(),
     soundboardPolicy: soundboardPolicyValidator,
   },
   handler: async (ctx, args) => {
     const roomCode = roomCodeSchema.parse(args.roomCode)
     const ownerSessionId = sessionIdSchema.parse(args.ownerSessionId)
+    const ownerSessionSecret = ownerSessionSecretSchema.parse(args.ownerSessionSecret)
     const soundboardPolicy = soundboardPolicySchema.parse(args.soundboardPolicy)
 
     const room = await findRoomByCode(ctx, roomCode)
@@ -264,15 +322,47 @@ export const updateSoundboardPolicy = mutation({
       })
     }
 
-    if (room.createdBySessionId !== ownerSessionId) {
-      throw new ConvexError({
-        code: 'not_owner',
-        message: 'Only the room owner can update room settings.',
-      })
-    }
+    await assertOwnerControl(ctx, room, ownerSessionId, ownerSessionSecret)
 
     await ctx.db.patch(room._id, {
       soundboardPolicy,
+      lastActivityAt: Date.now(),
+    })
+
+    return {
+      ok: true,
+    }
+  },
+})
+
+export const updateStageInteractionPolicy = mutation({
+  args: {
+    roomCode: v.string(),
+    ownerSessionId: v.string(),
+    ownerSessionSecret: v.string(),
+    stageInteractionPolicy: stageInteractionPolicyValidator,
+  },
+  handler: async (ctx, args) => {
+    const roomCode = roomCodeSchema.parse(args.roomCode)
+    const ownerSessionId = sessionIdSchema.parse(args.ownerSessionId)
+    const ownerSessionSecret = ownerSessionSecretSchema.parse(args.ownerSessionSecret)
+    const stageInteractionPolicy = stageInteractionPolicySchema.parse(
+      args.stageInteractionPolicy,
+    )
+
+    const room = await findRoomByCode(ctx, roomCode)
+
+    if (!room || room.archived) {
+      throw new ConvexError({
+        code: 'room_not_found',
+        message: 'Room was not found.',
+      })
+    }
+
+    await assertOwnerControl(ctx, room, ownerSessionId, ownerSessionSecret)
+
+    await ctx.db.patch(room._id, {
+      stageInteractionPolicy,
       lastActivityAt: Date.now(),
     })
 
@@ -505,6 +595,7 @@ export const defaultRoomPolicy = query({
         kind: 'auto' as const,
         defaultMaxParticipants: DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
       },
+      stageInteractionPolicy: DEFAULT_STAGE_INTERACTION_POLICY,
     }
   },
 })

@@ -1,16 +1,23 @@
 import { customAlphabet } from 'nanoid'
 import { z } from 'zod'
 
-const sessionSchema = z.object({
+const sessionProfileBaseSchema = z.object({
   sessionId: z.string().min(8).max(64),
   displayName: z.string().min(2).max(24),
   color: z.string().regex(/^#[a-fA-F0-9]{6}$/),
+})
+
+const sessionSecretSchema = z.string().min(24).max(64).regex(/^[a-z0-9]+$/)
+
+const sessionSchema = sessionProfileBaseSchema.extend({
+  sessionSecret: sessionSecretSchema,
 })
 
 export type SessionProfile = z.infer<typeof sessionSchema>
 
 const storageKey = 'tp-convex-session-v1'
 const makeId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 20)
+const makeSecret = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 32)
 
 const adjectives = [
   'Keen',
@@ -34,8 +41,34 @@ function randomItem<T>(values: readonly T[]): T {
 function createDefaultProfile(): SessionProfile {
   return {
     sessionId: makeId(),
+    sessionSecret: makeSecret(),
     displayName: `${randomItem(adjectives)} ${randomItem(nouns)}`,
     color: randomItem(palette),
+  }
+}
+
+function upgradeProfile(
+  profile: z.infer<typeof sessionProfileBaseSchema>,
+): SessionProfile {
+  return {
+    ...profile,
+    sessionSecret: makeSecret(),
+  }
+}
+
+function parseStoredProfile(raw: string): SessionProfile | null {
+  try {
+    const parsedJson = JSON.parse(raw)
+
+    const parsed = sessionSchema.safeParse(parsedJson)
+    if (parsed.success) {
+      return parsed.data
+    }
+
+    const legacy = sessionProfileBaseSchema.safeParse(parsedJson)
+    return legacy.success ? upgradeProfile(legacy.data) : null
+  } catch {
+    return null
   }
 }
 
@@ -51,14 +84,15 @@ export function loadSessionProfile(): SessionProfile {
     return profile
   }
 
-  const parsed = sessionSchema.safeParse(JSON.parse(raw))
-  if (!parsed.success) {
+  const parsed = parseStoredProfile(raw)
+  if (!parsed) {
     const profile = createDefaultProfile()
     window.localStorage.setItem(storageKey, JSON.stringify(profile))
     return profile
   }
 
-  return parsed.data
+  window.localStorage.setItem(storageKey, JSON.stringify(parsed))
+  return parsed
 }
 
 export function saveSessionProfile(profile: SessionProfile): SessionProfile {

@@ -323,7 +323,7 @@ function RouteComponent() {
               ) : null}
 
               <Button
-                disabled={isSubmitting || !isHydrated}
+                disabled={isSubmitting}
                 className="w-full"
                 type="submit"
               >

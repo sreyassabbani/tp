@@ -440,7 +440,7 @@ function RoomRoute() {
     }
   }
 
-  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
+  async function onCursorMove(event: React.PointerEvent<HTMLDivElement>) {
     if (stageMode !== 'cursor' || !roomCode || !room || !hasJoined) {
       return
     }
@@ -479,7 +479,7 @@ function RoomRoute() {
   }
 
   function getStagePoint(
-    event: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>,
+    event: React.PointerEvent<HTMLDivElement>,
   ): StagePoint | null {
     const area = cursorContainerRef.current
     if (!area) {
@@ -874,10 +874,10 @@ function RoomRoute() {
             <div
               ref={cursorContainerRef}
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"
-              onMouseMove={onCursorMove}
-              onMouseLeave={() => {
+              onPointerLeave={() => {
                 lastCursorSentAt.current = 0
               }}
+              onPointerMove={onCursorMove}
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe

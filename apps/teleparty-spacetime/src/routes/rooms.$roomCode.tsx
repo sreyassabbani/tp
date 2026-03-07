@@ -116,6 +116,7 @@ function RoomRoute() {
   )
 
   const [soundError, setSoundError] = useState<string | null>(null)
+  const [stageMode, setStageMode] = useState<'cursor' | 'interact'>('interact')
   const [optimisticCursor, setOptimisticCursor] = useState<{
     color: string
     displayName: string
@@ -358,7 +359,7 @@ function RoomRoute() {
   }
 
   async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
-    if (!roomCode || !room || !hasJoined) {
+    if (stageMode !== 'cursor' || !roomCode || !room || !hasJoined) {
       return
     }
 
@@ -494,6 +495,12 @@ function RoomRoute() {
     setOptimisticCursor(null)
   }, [roomCode])
 
+  useEffect(() => {
+    if (stageMode === 'interact') {
+      setOptimisticCursor(null)
+    }
+  }, [stageMode])
+
   if (!roomCode) {
     return (
       <main className="mx-auto w-full max-w-4xl px-4 py-8">
@@ -602,10 +609,34 @@ function RoomRoute() {
       <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
         <Card className="overflow-hidden border-border/70 bg-card/80">
           <CardHeader>
-            <CardTitle>Shared Stage</CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Shared Stage</CardTitle>
+                <CardDescription>
+                  Switch between direct video interaction and shared cursor mode.
+                </CardDescription>
+              </div>
+              <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
+                <button
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${stageMode === 'interact' ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setStageMode('interact')}
+                  type="button"
+                >
+                  Interact
+                </button>
+                <button
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${stageMode === 'cursor' ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setStageMode('cursor')}
+                  type="button"
+                >
+                  Cursor
+                </button>
+              </div>
+            </div>
             <CardDescription>
-              Cursor movement is streamed to everyone in this room. The preview is
-              hover-only so tracking stays continuous across the whole stage.
+              {stageMode === 'interact'
+                ? 'Video controls are enabled in interact mode.'
+                : 'Cursor mode streams movement to everyone in the room.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -624,7 +655,10 @@ function RoomRoute() {
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe
-                className="pointer-events-none absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className={`absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background ${stageMode === 'interact' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                referrerPolicy="strict-origin-when-cross-origin"
                 src={watchFrameUrl ?? room.watchUrl}
                 title={`Room ${room.roomCode} watch frame`}
               />

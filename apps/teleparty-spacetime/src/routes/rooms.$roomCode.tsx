@@ -449,6 +449,51 @@ function RoomRoute() {
     }
   }
 
+  const participantCount = roomParticipants.length
+  const soundboardEnabled = roomPolicy
+    ? canUseSoundboard(roomPolicy, participantCount)
+    : false
+
+  const isOwner = room?.ownerSessionId === sessionProfile.sessionId
+  const renderedParticipants = useMemo(() => {
+    const bySessionId = new Map<
+      string,
+      {
+        color: string
+        displayName: string
+        participantKey: string
+        sessionId: string
+        x: number
+        y: number
+      }
+    >()
+
+    for (const participant of roomParticipants) {
+      bySessionId.set(participant.sessionId, {
+        color: participant.color,
+        displayName: participant.displayName,
+        participantKey: participant.participantKey,
+        sessionId: participant.sessionId,
+        x: participant.cursorX * 100,
+        y: participant.cursorY * 100,
+      })
+    }
+
+    if (optimisticCursor) {
+      bySessionId.set(optimisticCursor.sessionId, {
+        ...optimisticCursor,
+        x: optimisticCursor.x * 100,
+        y: optimisticCursor.y * 100,
+      })
+    }
+
+    return Array.from(bySessionId.values())
+  }, [optimisticCursor, roomParticipants])
+
+  useEffect(() => {
+    setOptimisticCursor(null)
+  }, [roomCode])
+
   if (!roomCode) {
     return (
       <main className="mx-auto w-full max-w-4xl px-4 py-8">
@@ -529,51 +574,6 @@ function RoomRoute() {
       </main>
     )
   }
-
-  const participantCount = roomParticipants.length
-  const soundboardEnabled = roomPolicy
-    ? canUseSoundboard(roomPolicy, participantCount)
-    : false
-
-  const isOwner = room.ownerSessionId === sessionProfile.sessionId
-  const renderedParticipants = useMemo(() => {
-    const bySessionId = new Map<
-      string,
-      {
-        color: string
-        displayName: string
-        participantKey: string
-        sessionId: string
-        x: number
-        y: number
-      }
-    >()
-
-    for (const participant of roomParticipants) {
-      bySessionId.set(participant.sessionId, {
-        color: participant.color,
-        displayName: participant.displayName,
-        participantKey: participant.participantKey,
-        sessionId: participant.sessionId,
-        x: participant.cursorX * 100,
-        y: participant.cursorY * 100,
-      })
-    }
-
-    if (optimisticCursor) {
-      bySessionId.set(optimisticCursor.sessionId, {
-        ...optimisticCursor,
-        x: optimisticCursor.x * 100,
-        y: optimisticCursor.y * 100,
-      })
-    }
-
-    return Array.from(bySessionId.values())
-  }, [optimisticCursor, roomParticipants])
-
-  useEffect(() => {
-    setOptimisticCursor(null)
-  }, [roomCode])
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">

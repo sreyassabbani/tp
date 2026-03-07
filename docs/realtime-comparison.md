@@ -82,11 +82,13 @@ then Convex is still a solid choice, but it will need more careful tuning on hot
 
 ---
 
-## Recent Convex Cleanup
+## Recent Cursor Tuning
 
 This repo now avoids two avoidable Convex costs:
 - cursor updates no longer rewrite participant-profile metadata
 - room liveness heartbeats only bump `lastActivityAt` once per minute at most
+- local cursor rendering is optimistic, so your own cursor paints immediately
+- the old Convex cursor write cap was raised because it was too conservative for pointer movement
 
 Those changes reduce write churn, but they do not change the underlying architectural tradeoff.
 

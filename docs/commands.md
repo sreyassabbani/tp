@@ -26,7 +26,15 @@ Installs Bun dependencies for:
 
 ## Convex Flow
 
-Run in two terminals:
+Recommended:
+
+```bash
+just convex-dev
+```
+
+This runs the backend sync and web client together, and waits for `VITE_CONVEX_URL` before booting Vite.
+
+Manual fallback:
 
 ```bash
 just convex-backend
@@ -49,15 +57,20 @@ cd apps/teleparty-convex
 
 ## Spacetime Flow
 
-Run in three terminals:
+Recommended:
 
 ```bash
-just spacetime-db
-just spacetime-sync
-just spacetime-web
+just spacetime-dev
 ```
 
-Manual equivalents:
+This uses the repo wrapper to:
+- start the local server
+- publish the module
+- regenerate bindings
+- keep publish and binding-refresh watchers running
+- run the web dev server
+
+Manual fallback:
 
 ```bash
 cd apps/teleparty-spacetime
@@ -74,6 +87,8 @@ cd apps/teleparty-spacetime
 cd apps/teleparty-spacetime
  direnv exec /Users/sreysus/workflow/tp bun run dev
 ```
+
+The repo used to expose the split flow more prominently, which made Spacetime feel heavier than it needed to. The recommended path is now one command from the repo root.
 
 ---
 

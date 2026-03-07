@@ -11,6 +11,8 @@ Welcome to the Teleparty Clone Lab documentation vault. This repo contains two i
 
 Both variants aim for feature parity, but the realtime transport and backend programming model are intentionally different.
 
+Obsidian setup is checked in under `docs/.obsidian`, so you can open `docs/` directly as a vault.
+
 ---
 
 ## Navigation
@@ -47,16 +49,13 @@ just bootstrap
 Convex flow:
 
 ```bash
-just convex-backend
-just convex-web
+just convex-dev
 ```
 
 Spacetime flow:
 
 ```bash
-just spacetime-db
-just spacetime-sync
-just spacetime-web
+just spacetime-dev
 ```
 
 Build both:
@@ -97,3 +96,5 @@ This repo is not just a single app. It is a side-by-side lab for comparing two r
 - owner controls and participant permissions
 
 If you are trying to understand why one implementation feels better than the other, start with [[realtime-comparison]].
+
+If you want the easiest local workflows, use `just convex-dev` or `just spacetime-dev`. The split subcommands still exist, but only as manual fallbacks.

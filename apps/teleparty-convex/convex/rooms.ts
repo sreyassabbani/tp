@@ -77,9 +77,9 @@ const roomCapabilitiesValidator = v.array(v.string())
 const roomRateLimiter = new RateLimiter(components.rateLimiter, {
   cursorBurst: {
     kind: 'token bucket',
-    rate: 240,
+    rate: 1800,
     period: MINUTE,
-    capacity: 45,
+    capacity: 120,
   },
   soundboardBurst: {
     kind: 'token bucket',
@@ -659,9 +659,11 @@ export const upsertCursor = mutation({
       })
     }
 
-    await ctx.db.patch(room._id, {
-      lastActivityAt: now,
-    })
+    if (now - room.lastActivityAt >= ROOM_ACTIVITY_HEARTBEAT_MS) {
+      await ctx.db.patch(room._id, {
+        lastActivityAt: now,
+      })
+    }
 
     await trimCursorRows(ctx, parsed.roomCode)
 

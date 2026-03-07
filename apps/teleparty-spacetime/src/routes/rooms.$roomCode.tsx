@@ -4,6 +4,7 @@ import { useReducer, useTable } from 'spacetimedb/react'
 import { reducers, tables } from '#/module_bindings'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
+import { StageCursor } from '#/components/stage-cursor'
 import {
   Card,
   CardContent,
@@ -28,6 +29,8 @@ import { playSound, sounds } from '#/lib/soundboard'
 export const Route = createFileRoute('/rooms/$roomCode')({
   component: RoomRoute,
 })
+
+const CURSOR_SEND_INTERVAL_MS = 40
 
 function sameSoundboardPolicy(
   left: SoundboardPolicy,
@@ -113,6 +116,14 @@ function RoomRoute() {
   )
 
   const [soundError, setSoundError] = useState<string | null>(null)
+  const [optimisticCursor, setOptimisticCursor] = useState<{
+    color: string
+    displayName: string
+    participantKey: string
+    sessionId: string
+    x: number
+    y: number
+  } | null>(null)
 
   const roomCode = useMemo(() => {
     try {
@@ -285,15 +296,69 @@ function RoomRoute() {
   }, [roomSoundEvents])
 
   const cursorContainerRef = useRef<HTMLDivElement | null>(null)
-  const lastCursorUpdateAt = useRef(0)
+  const lastCursorSentAt = useRef(0)
+  const cursorFlushTimeout = useRef<number | null>(null)
+  const cursorReducerInFlight = useRef(false)
+  const pendingCursorPayload = useRef<{
+    roomCode: string
+    sessionId: string
+    x: number
+    y: number
+  } | null>(null)
 
-  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
-    if (!roomCode || !room || !hasJoined) {
+  useEffect(() => {
+    return () => {
+      if (cursorFlushTimeout.current !== null) {
+        window.clearTimeout(cursorFlushTimeout.current)
+      }
+    }
+  }, [])
+
+  function scheduleCursorFlush(delayMs: number) {
+    if (cursorFlushTimeout.current !== null) {
       return
     }
 
-    const now = Date.now()
-    if (now - lastCursorUpdateAt.current < 55) {
+    cursorFlushTimeout.current = window.setTimeout(() => {
+      cursorFlushTimeout.current = null
+      void flushCursorUpdate()
+    }, delayMs)
+  }
+
+  async function flushCursorUpdate() {
+    if (cursorReducerInFlight.current) {
+      return
+    }
+
+    const payload = pendingCursorPayload.current
+    if (!payload) {
+      return
+    }
+
+    const elapsed = Date.now() - lastCursorSentAt.current
+    if (elapsed < CURSOR_SEND_INTERVAL_MS) {
+      scheduleCursorFlush(CURSOR_SEND_INTERVAL_MS - elapsed)
+      return
+    }
+
+    pendingCursorPayload.current = null
+    cursorReducerInFlight.current = true
+    lastCursorSentAt.current = Date.now()
+
+    try {
+      await updateCursor(payload)
+    } catch {
+      // Ignore transient reducer failures; the next move retries with latest state.
+    } finally {
+      cursorReducerInFlight.current = false
+      if (pendingCursorPayload.current) {
+        void flushCursorUpdate()
+      }
+    }
+  }
+
+  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
+    if (!roomCode || !room || !hasJoined) {
       return
     }
 
@@ -310,14 +375,24 @@ function RoomRoute() {
       return
     }
 
-    lastCursorUpdateAt.current = now
-
-    await updateCursor({
+    const payload = {
       roomCode,
       sessionId: sessionProfile.sessionId,
       x: cursorPosition.x,
       y: cursorPosition.y,
+    }
+
+    setOptimisticCursor({
+      color: sessionProfile.color,
+      displayName: sessionProfile.displayName,
+      participantKey: `${roomCode}:${sessionProfile.sessionId}`,
+      sessionId: sessionProfile.sessionId,
+      x: payload.x,
+      y: payload.y,
     })
+
+    pendingCursorPayload.current = payload
+    void flushCursorUpdate()
   }
 
   async function onSoundButtonClick(soundId: (typeof sounds)[number]['id']) {
@@ -461,6 +536,44 @@ function RoomRoute() {
     : false
 
   const isOwner = room.ownerSessionId === sessionProfile.sessionId
+  const renderedParticipants = useMemo(() => {
+    const bySessionId = new Map<
+      string,
+      {
+        color: string
+        displayName: string
+        participantKey: string
+        sessionId: string
+        x: number
+        y: number
+      }
+    >()
+
+    for (const participant of roomParticipants) {
+      bySessionId.set(participant.sessionId, {
+        color: participant.color,
+        displayName: participant.displayName,
+        participantKey: participant.participantKey,
+        sessionId: participant.sessionId,
+        x: participant.cursorX * 100,
+        y: participant.cursorY * 100,
+      })
+    }
+
+    if (optimisticCursor) {
+      bySessionId.set(optimisticCursor.sessionId, {
+        ...optimisticCursor,
+        x: optimisticCursor.x * 100,
+        y: optimisticCursor.y * 100,
+      })
+    }
+
+    return Array.from(bySessionId.values())
+  }, [optimisticCursor, roomParticipants])
+
+  useEffect(() => {
+    setOptimisticCursor(null)
+  }, [roomCode])
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
@@ -506,7 +619,7 @@ function RoomRoute() {
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"
               onMouseMove={onCursorMove}
               onMouseLeave={() => {
-                lastCursorUpdateAt.current = 0
+                lastCursorSentAt.current = 0
               }}
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
@@ -516,22 +629,15 @@ function RoomRoute() {
                 title={`Room ${room.roomCode} watch frame`}
               />
 
-              {roomParticipants.map((participant) => (
-                <div
+              {renderedParticipants.map((participant) => (
+                <StageCursor
                   key={participant.participantKey}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    left: `${Math.round(participant.cursorX * 100)}%`,
-                    top: `${Math.round(participant.cursorY * 100)}%`,
-                  }}
-                >
-                  <div
-                    className="rounded-full px-2 py-1 text-[10px] font-semibold text-white shadow-md"
-                    style={{ backgroundColor: participant.color }}
-                  >
-                    {participant.displayName}
-                  </div>
-                </div>
+                  color={participant.color}
+                  displayName={participant.displayName}
+                  isSelf={participant.sessionId === sessionProfile.sessionId}
+                  x={participant.x}
+                  y={participant.y}
+                />
               ))}
             </div>
           </CardContent>

@@ -112,5 +112,7 @@ That is a reasonable model for product logic, but it is less ideal for extremely
 This repo now avoids an extra self-inflicted cost in that path:
 - cursor updates no longer also rewrite participant-profile rows
 - room liveness heartbeats only touch room activity once per minute at most
+- the cursor burst limiter is tuned for actual pointer traffic instead of very low sustained rates
+- the frontend now paints the local cursor optimistically before backend roundtrips complete
 
 See [[realtime-comparison]].

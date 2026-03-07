@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
+import { StageCursor } from '#/components/stage-cursor'
 import {
   Card,
   CardContent,
@@ -32,6 +33,8 @@ import { playSound, sounds } from '#/lib/soundboard'
 export const Route = createFileRoute('/rooms/$roomCode')({
   component: RoomRoute,
 })
+
+const CURSOR_SEND_INTERVAL_MS = 40
 
 function sameSoundboardPolicy(
   left: SoundboardPolicy,
@@ -85,6 +88,13 @@ function RoomRoute() {
   const [updatingParticipantSessionId, setUpdatingParticipantSessionId] =
     useState<string | null>(null)
   const [stageMode, setStageMode] = useState<'cursor' | 'interact'>('cursor')
+  const [optimisticCursor, setOptimisticCursor] = useState<{
+    color: string
+    displayName: string
+    sessionId: string
+    x: number
+    y: number
+  } | null>(null)
 
   const roomCode = useMemo(() => {
     try {
@@ -288,15 +298,108 @@ function RoomRoute() {
   ])
 
   const cursorContainerRef = useRef<HTMLDivElement | null>(null)
-  const lastCursorUpdateAt = useRef(0)
+  const lastCursorSentAt = useRef(0)
+  const cursorFlushTimeout = useRef<number | null>(null)
+  const cursorMutationInFlight = useRef(false)
+  const pendingCursorPayload = useRef<{
+    color: string
+    displayName: string
+    roomCode: string
+    sessionId: string
+    x: number
+    y: number
+  } | null>(null)
 
-  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
-    if (!roomCode || roomLookup?.kind !== 'ok') {
+  useEffect(() => {
+    return () => {
+      if (cursorFlushTimeout.current !== null) {
+        window.clearTimeout(cursorFlushTimeout.current)
+      }
+    }
+  }, [])
+
+  function scheduleCursorFlush(delayMs: number) {
+    if (cursorFlushTimeout.current !== null) {
       return
     }
 
-    const now = Date.now()
-    if (now - lastCursorUpdateAt.current < 55) {
+    cursorFlushTimeout.current = window.setTimeout(() => {
+      cursorFlushTimeout.current = null
+      void flushCursorUpdate()
+    }, delayMs)
+  }
+
+  async function flushCursorUpdate() {
+    if (cursorMutationInFlight.current) {
+      return
+    }
+
+    const payload = pendingCursorPayload.current
+    if (!payload) {
+      return
+    }
+
+    const elapsed = Date.now() - lastCursorSentAt.current
+    if (elapsed < CURSOR_SEND_INTERVAL_MS) {
+      scheduleCursorFlush(CURSOR_SEND_INTERVAL_MS - elapsed)
+      return
+    }
+
+    pendingCursorPayload.current = null
+    cursorMutationInFlight.current = true
+    lastCursorSentAt.current = Date.now()
+
+    try {
+      await upsertCursor(payload)
+    } catch {
+      // Ignore transient cursor sync failures; the next move retries with latest state.
+    } finally {
+      cursorMutationInFlight.current = false
+      if (pendingCursorPayload.current) {
+        void flushCursorUpdate()
+      }
+    }
+  }
+
+  const renderedCursors = useMemo(() => {
+    const bySessionId = new Map<
+      string,
+      {
+        color: string
+        displayName: string
+        sessionId: string
+        x: number
+        y: number
+      }
+    >()
+
+    for (const cursor of cursors ?? []) {
+      bySessionId.set(cursor.sessionId, {
+        color: cursor.color,
+        displayName: cursor.displayName,
+        sessionId: cursor.sessionId,
+        x: cursor.x * 100,
+        y: cursor.y * 100,
+      })
+    }
+
+    if (optimisticCursor) {
+      bySessionId.set(optimisticCursor.sessionId, {
+        ...optimisticCursor,
+        x: optimisticCursor.x * 100,
+        y: optimisticCursor.y * 100,
+      })
+    }
+
+    return Array.from(bySessionId.values())
+  }, [cursors, optimisticCursor])
+
+  useEffect(() => {
+    setOptimisticCursor(null)
+  }, [roomCode])
+
+  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
+    if (!roomCode || roomLookup?.kind !== 'ok') {
       return
     }
 
@@ -313,16 +416,25 @@ function RoomRoute() {
       return
     }
 
-    lastCursorUpdateAt.current = now
-
-    await upsertCursor({
+    const payload = {
       roomCode,
       sessionId: sessionProfile.sessionId,
       displayName: sessionProfile.displayName,
       color: sessionProfile.color,
       x: cursorPosition.x,
       y: cursorPosition.y,
+    }
+
+    setOptimisticCursor({
+      color: payload.color,
+      displayName: payload.displayName,
+      sessionId: payload.sessionId,
+      x: payload.x,
+      y: payload.y,
     })
+
+    pendingCursorPayload.current = payload
+    void flushCursorUpdate()
   }
 
   async function onSoundButtonClick(soundId: (typeof sounds)[number]['id']) {
@@ -450,7 +562,7 @@ function RoomRoute() {
   }, [canUseStageInteraction, stageMode])
 
   useEffect(() => {
-    lastCursorUpdateAt.current = 0
+    lastCursorSentAt.current = 0
   }, [stageIsInteractive])
 
   const stageStatusMessage = stageIsInteractive
@@ -608,7 +720,7 @@ function RoomRoute() {
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"
               onMouseMove={stageIsInteractive ? undefined : onCursorMove}
               onMouseLeave={() => {
-                lastCursorUpdateAt.current = 0
+                lastCursorSentAt.current = 0
               }}
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
@@ -618,22 +730,15 @@ function RoomRoute() {
                 title={`Room ${room.roomCode} watch frame`}
               />
 
-              {(cursors ?? []).map((cursor) => (
-                <div
-                  key={`${cursor.roomCode}-${cursor.sessionId}`}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    left: `${Math.round(cursor.x * 100)}%`,
-                    top: `${Math.round(cursor.y * 100)}%`,
-                  }}
-                >
-                  <div
-                    className="rounded-full px-2 py-1 text-[10px] font-semibold text-white shadow-md"
-                    style={{ backgroundColor: cursor.color }}
-                  >
-                    {cursor.displayName}
-                  </div>
-                </div>
+              {renderedCursors.map((cursor) => (
+                <StageCursor
+                  key={`${room.roomCode}-${cursor.sessionId}`}
+                  color={cursor.color}
+                  displayName={cursor.displayName}
+                  isSelf={cursor.sessionId === sessionProfile.sessionId}
+                  x={cursor.x}
+                  y={cursor.y}
+                />
               ))}
             </div>
           </CardContent>

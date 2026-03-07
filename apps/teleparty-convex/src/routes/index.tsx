@@ -24,7 +24,11 @@ import {
   createRoomInputSchema,
   type SoundboardPolicy,
 } from '#/lib/teleparty-domain'
-import { loadSessionProfile, saveSessionProfile } from '#/lib/session'
+import {
+  loadSessionProfile,
+  saveSessionProfile,
+  SESSION_PROFILE_PLACEHOLDER,
+} from '#/lib/session'
 
 export const Route = createFileRoute('/')({ component: RouteComponent })
 
@@ -34,7 +38,10 @@ function RouteComponent() {
   const publicRooms = useQuery(api.rooms.listPublicRooms, { limit: 12 })
   const roomPolicy = useQuery(api.rooms.defaultRoomPolicy, {})
 
-  const [sessionProfile, setSessionProfile] = useState(() => loadSessionProfile())
+  const [sessionProfile, setSessionProfile] = useState(
+    SESSION_PROFILE_PLACEHOLDER,
+  )
+  const [hasHydratedSession, setHasHydratedSession] = useState(false)
 
   const [watchUrl, setWatchUrl] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -64,6 +71,11 @@ function RouteComponent() {
     )
   }, [autoCapacity])
 
+  useEffect(() => {
+    setSessionProfile(loadSessionProfile())
+    setHasHydratedSession(true)
+  }, [])
+
   const soundboardPreview = useMemo(() => {
     if (draftSoundboardPolicy.kind === 'manual') {
       return `${draftSoundboardPolicy.enabled ? 'Enabled' : 'Disabled'} up to ${draftSoundboardPolicy.maxParticipants} participants`
@@ -74,6 +86,12 @@ function RouteComponent() {
   async function onCreateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+
+    if (!hasHydratedSession) {
+      setError('Session is still initializing. Retry in a moment.')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -120,6 +138,10 @@ function RouteComponent() {
   }
 
   function updateDisplayName(value: string) {
+    if (!hasHydratedSession) {
+      return
+    }
+
     setSessionProfile((current) =>
       saveSessionProfile({
         ...current,
@@ -287,8 +309,16 @@ function RouteComponent() {
                 </p>
               ) : null}
 
-              <Button disabled={isSubmitting} className="w-full" type="submit">
-                {isSubmitting ? 'Creating room...' : 'Create Room'}
+              <Button
+                disabled={isSubmitting || !hasHydratedSession}
+                className="w-full"
+                type="submit"
+              >
+                {isSubmitting
+                  ? 'Creating room...'
+                  : hasHydratedSession
+                    ? 'Create Room'
+                    : 'Preparing session...'}
               </Button>
             </form>
           </CardContent>
@@ -307,6 +337,7 @@ function RouteComponent() {
               <Label htmlFor="display-name">Display Name</Label>
               <Input
                 id="display-name"
+                disabled={!hasHydratedSession}
                 value={sessionProfile.displayName}
                 onChange={(event) => updateDisplayName(event.target.value)}
               />
@@ -315,16 +346,22 @@ function RouteComponent() {
             <Separator />
 
             <div className="space-y-2 text-xs text-muted-foreground">
-              <p className="m-0">
-                Session ID: <code>{sessionProfile.sessionId}</code>
-              </p>
-              <p className="m-0">
-                Cursor color: <code>{sessionProfile.color}</code>
-              </p>
-              <p className="m-0">
-                Clearing local storage on this browser drops owner access for new
-                rooms.
-              </p>
+              {hasHydratedSession ? (
+                <>
+                  <p className="m-0">
+                    Session ID: <code>{sessionProfile.sessionId}</code>
+                  </p>
+                  <p className="m-0">
+                    Cursor color: <code>{sessionProfile.color}</code>
+                  </p>
+                  <p className="m-0">
+                    Clearing local storage on this browser drops owner access for
+                    new rooms.
+                  </p>
+                </>
+              ) : (
+                <p className="m-0">Loading this browser&apos;s local session...</p>
+              )}
             </div>
           </CardContent>
         </Card>

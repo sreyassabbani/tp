@@ -9,12 +9,12 @@ import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
   plugins: [
-    devtools(),
+    process.env.VITE_ENABLE_TANSTACK_DEVTOOLS === 'true' ? devtools() : null,
     tsconfigPaths({ projects: ['./tsconfig.json'] }),
     tailwindcss(),
     tanstackStart(),
     viteReact(),
-  ],
+  ].filter(Boolean),
 })
 
 export default config

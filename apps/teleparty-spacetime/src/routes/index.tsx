@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { createFileRoute } from '@tanstack/react-router'
 import { customAlphabet } from 'nanoid'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react'
 import { tables, reducers } from '#/module_bindings'
 import { Badge } from '#/components/ui/badge'
@@ -29,6 +29,54 @@ import { useSessionProfile } from '#/lib/session'
 export const Route = createFileRoute('/')({ component: RouteComponent })
 
 const createRoomCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
+const publicRoomsCacheKey = 'tp-spacetime-public-rooms-v1'
+
+type PublicRoomSnapshot = Readonly<{
+  createdAtMs: number
+  participantCount: number
+  roomCode: string
+  watchHost: string
+}>
+
+function readCachedPublicRooms(): PublicRoomSnapshot[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(publicRoomsCacheKey) ?? '[]',
+    )
+
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.flatMap((room) => {
+      if (
+        !room ||
+        typeof room !== 'object' ||
+        typeof room.roomCode !== 'string' ||
+        typeof room.watchHost !== 'string' ||
+        typeof room.createdAtMs !== 'number' ||
+        typeof room.participantCount !== 'number'
+      ) {
+        return []
+      }
+
+      return [
+        {
+          roomCode: room.roomCode,
+          watchHost: room.watchHost,
+          createdAtMs: room.createdAtMs,
+          participantCount: room.participantCount,
+        },
+      ]
+    })
+  } catch {
+    return []
+  }
+}
 
 function RouteComponent() {
   const navigate = useNavigate()
@@ -66,6 +114,9 @@ function RouteComponent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cachedPublicRooms, setCachedPublicRooms] = useState<PublicRoomSnapshot[]>(
+    () => readCachedPublicRooms(),
+  )
 
   const soundboardPreview = useMemo(() => {
     if (draftSoundboardPolicy.kind === 'manual') {
@@ -73,6 +124,34 @@ function RouteComponent() {
     }
     return `Auto mode: enabled up to ${draftSoundboardPolicy.defaultMaxParticipants} participants`
   }, [draftSoundboardPolicy])
+
+  useEffect(() => {
+    if (!roomsReady || !participantsReady) {
+      return
+    }
+
+    const snapshot = publicRooms.map((room) => ({
+      roomCode: room.roomCode,
+      watchHost: room.watchHost,
+      createdAtMs: room.createdAtMs,
+      participantCount: participantCountByRoom.get(room.roomCode) ?? 0,
+    }))
+
+    setCachedPublicRooms(snapshot)
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(publicRoomsCacheKey, JSON.stringify(snapshot))
+    }
+  }, [participantCountByRoom, participantsReady, publicRooms, roomsReady])
+
+  const displayedPublicRooms = roomsReady && participantsReady
+    ? publicRooms.map((room) => ({
+        roomCode: room.roomCode,
+        watchHost: room.watchHost,
+        createdAtMs: room.createdAtMs,
+        participantCount: participantCountByRoom.get(room.roomCode) ?? 0,
+      }))
+    : cachedPublicRooms
 
   async function onCreateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -388,11 +467,13 @@ function RouteComponent() {
         <CardContent>
           {!roomsReady || !participantsReady ? (
             <p className="mb-4 text-sm text-muted-foreground">
-              Syncing live room list...
+              {cachedPublicRooms.length > 0
+                ? 'Refreshing live room list...'
+                : 'Syncing live room list...'}
             </p>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {publicRooms.map((room) => (
+            {displayedPublicRooms.map((room) => (
               <button
                 key={room.roomCode}
                 className="rounded-2xl border border-border/70 bg-background/70 p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/50"
@@ -409,14 +490,14 @@ function RouteComponent() {
                   Room {room.roomCode}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {participantCountByRoom.get(room.roomCode) ?? 0} active
-                  participant{(participantCountByRoom.get(room.roomCode) ?? 0) === 1 ? '' : 's'}
+                  {room.participantCount} active
+                  participant{room.participantCount === 1 ? '' : 's'}
                 </p>
               </button>
             ))}
           </div>
 
-          {publicRooms.length === 0 ? (
+          {displayedPublicRooms.length === 0 ? (
             <p className="m-0 text-sm text-muted-foreground">No public rooms yet.</p>
           ) : null}
         </CardContent>

@@ -33,10 +33,22 @@ export const Route = createFileRoute('/rooms/$roomCode')({
 
 const CURSOR_SEND_INTERVAL_MS = 40
 const MIN_DRAW_POINT_DELTA = 0.006
+const roomCacheKeyPrefix = 'tp-spacetime-room-v1:'
 
 type StagePoint = Readonly<{
   x: number
   y: number
+}>
+
+type CachedRoomSnapshot = Readonly<{
+  autoSoundboardCapacity: number
+  manualSoundboardCapacity: number
+  manualSoundboardEnabled: boolean
+  ownerDisplayName: string
+  roomCode: string
+  soundboardMode: string
+  visibility: string
+  watchUrl: string
 }>
 
 function sameSoundboardPolicy(
@@ -144,6 +156,46 @@ function parseStrokePoints(pointsJson: string): StagePoint[] {
   }
 }
 
+function readCachedRoom(roomCode: string | null): CachedRoomSnapshot | null {
+  if (typeof window === 'undefined' || !roomCode) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(`${roomCacheKeyPrefix}${roomCode}`) ?? 'null',
+    )
+
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof parsed.roomCode !== 'string' ||
+      typeof parsed.ownerDisplayName !== 'string' ||
+      typeof parsed.watchUrl !== 'string' ||
+      typeof parsed.visibility !== 'string' ||
+      typeof parsed.soundboardMode !== 'string' ||
+      typeof parsed.autoSoundboardCapacity !== 'number' ||
+      typeof parsed.manualSoundboardCapacity !== 'number' ||
+      typeof parsed.manualSoundboardEnabled !== 'boolean'
+    ) {
+      return null
+    }
+
+    return {
+      roomCode: parsed.roomCode,
+      ownerDisplayName: parsed.ownerDisplayName,
+      watchUrl: parsed.watchUrl,
+      visibility: parsed.visibility,
+      soundboardMode: parsed.soundboardMode,
+      autoSoundboardCapacity: parsed.autoSoundboardCapacity,
+      manualSoundboardCapacity: parsed.manualSoundboardCapacity,
+      manualSoundboardEnabled: parsed.manualSoundboardEnabled,
+    }
+  } catch {
+    return null
+  }
+}
+
 function RoomRoute() {
   const params = Route.useParams()
   const { sessionProfile, isHydrated } = useSessionProfile()
@@ -181,6 +233,7 @@ function RoomRoute() {
     x: number
     y: number
   } | null>(null)
+  const [cachedRoom, setCachedRoom] = useState<CachedRoomSnapshot | null>(null)
 
   const roomCode = useMemo(() => {
     try {
@@ -210,12 +263,41 @@ function RoomRoute() {
     ),
   )
 
-  const room = useMemo(() => {
+  useEffect(() => {
+    setCachedRoom(readCachedRoom(roomCode))
+  }, [roomCode])
+
+  const liveRoom = useMemo(() => {
     if (!roomCode) {
       return null
     }
     return roomRows[0] ?? null
   }, [roomCode, roomRows])
+
+  useEffect(() => {
+    if (!liveRoom || typeof window === 'undefined') {
+      return
+    }
+
+    const snapshot: CachedRoomSnapshot = {
+      roomCode: liveRoom.roomCode,
+      ownerDisplayName: liveRoom.ownerDisplayName,
+      watchUrl: liveRoom.watchUrl,
+      visibility: liveRoom.visibility,
+      soundboardMode: liveRoom.soundboardMode,
+      autoSoundboardCapacity: liveRoom.autoSoundboardCapacity,
+      manualSoundboardCapacity: liveRoom.manualSoundboardCapacity,
+      manualSoundboardEnabled: liveRoom.manualSoundboardEnabled,
+    }
+
+    setCachedRoom(snapshot)
+    window.localStorage.setItem(
+      `${roomCacheKeyPrefix}${liveRoom.roomCode}`,
+      JSON.stringify(snapshot),
+    )
+  }, [liveRoom])
+
+  const room = roomRowsReady ? liveRoom : liveRoom ?? cachedRoom
 
   const watchFrameUrl = useMemo(() => {
     if (!room) {
@@ -849,7 +931,9 @@ function RoomRoute() {
           <CardContent>
             {!participantRowsReady || !soundRowsReady || !drawingStrokeRowsReady ? (
               <p className="mb-3 text-sm text-muted-foreground">
-                Syncing live room state...
+                {cachedRoom && !liveRoom
+                  ? 'Refreshing live room state...'
+                  : 'Syncing live room state...'}
               </p>
             ) : null}
             {drawError ? (
@@ -881,7 +965,6 @@ function RoomRoute() {
             >
               <div className="grid-overlay absolute inset-0 rounded-2xl" />
               <iframe
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 className={`absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] rounded-xl border border-border/70 bg-background ${stageMode === 'interact' ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 referrerPolicy="strict-origin-when-cross-origin"

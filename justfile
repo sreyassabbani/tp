@@ -1,4 +1,4 @@
-set shell := ["zsh", "-cu"]
+set shell := ["nu", "-c"]
 
 root := justfile_directory()
 
@@ -7,37 +7,33 @@ default:
 
 # Install dependencies for both app variants and the Spacetime module package.
 bootstrap:
-  cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun install
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun install
-  cd {{root}}/apps/teleparty-spacetime/spacetimedb && direnv exec {{root}} bun install
+  nu {{root}}/scripts/tasks.nu bootstrap
 
 convex-backend:
-  cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun run convex:dev
+  nu {{root}}/scripts/tasks.nu convex-backend
 
 convex-web:
-  cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun run dev
+  nu {{root}}/scripts/tasks.nu convex-web
 
 convex-dev:
-  {{root}}/scripts/dev/convex.sh
+  nu {{root}}/scripts/tasks.nu convex-dev
 
 convex-build:
-  cd {{root}}/apps/teleparty-convex && direnv exec {{root}} bun run build
+  nu {{root}}/scripts/tasks.nu convex-build
 
 spacetime-dev:
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:dev
+  nu {{root}}/scripts/tasks.nu spacetime-dev
 
 spacetime-db:
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:start
+  nu {{root}}/scripts/tasks.nu spacetime-db
 
 spacetime-sync:
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:publish:local
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:generate
+  nu {{root}}/scripts/tasks.nu spacetime-sync
 
 spacetime-web:
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run dev
+  nu {{root}}/scripts/tasks.nu spacetime-web
 
 spacetime-build:
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run spacetime:build
-  cd {{root}}/apps/teleparty-spacetime && direnv exec {{root}} bun run build
+  nu {{root}}/scripts/tasks.nu spacetime-build
 
 build-all: convex-build spacetime-build

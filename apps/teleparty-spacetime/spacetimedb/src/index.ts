@@ -5,6 +5,7 @@ const DEFAULT_AUTO_SOUNDBOARD_CAPACITY = 8
 const ROOM_IDLE_TTL_MS = 30 * 60 * 1000
 const PARTICIPANT_STALE_TTL_MS = 20 * 1000
 const MAX_SOUND_EVENTS = 120
+const MAX_DRAWING_STROKES = 250
 
 const SOUND_IDS = new Set([
   'airhorn',
@@ -59,6 +60,18 @@ const spacetimedb = schema({
       sessionId: t.string().index(),
       actorDisplayName: t.string(),
       soundId: t.string().index(),
+      createdAtMs: t.f64(),
+    },
+  ),
+
+  drawingStroke: table(
+    { public: true },
+    {
+      strokeId: t.string().primaryKey(),
+      roomCode: t.string().index(),
+      sessionId: t.string().index(),
+      color: t.string(),
+      pointsJson: t.string(),
       createdAtMs: t.f64(),
     },
   ),
@@ -134,6 +147,37 @@ function normalizeColor(value: string): string {
   return color
 }
 
+function normalizeDrawingPoints(value: string): string {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new SenderError('Drawing payload must be valid JSON.')
+  }
+
+  if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 256) {
+    throw new SenderError('Drawings must include between 2 and 256 points.')
+  }
+
+  const points = parsed.map((point) => {
+    if (
+      !point ||
+      typeof point !== 'object' ||
+      typeof point.x !== 'number' ||
+      typeof point.y !== 'number'
+    ) {
+      throw new SenderError('Each drawing point must have numeric x/y coordinates.')
+    }
+
+    return {
+      x: Math.max(0, Math.min(point.x, 1)),
+      y: Math.max(0, Math.min(point.y, 1)),
+    }
+  })
+
+  return JSON.stringify(points)
+}
+
 function participantKey(roomCode: string, sessionId: string): string {
   return `${roomCode}:${sessionId}`
 }
@@ -188,6 +232,19 @@ function trimSoundEvents(ctx: any, roomCode: string) {
 
   for (const row of rows.slice(MAX_SOUND_EVENTS)) {
     ctx.db.soundEvent.delete(row)
+  }
+}
+
+function trimDrawingStrokes(ctx: any, roomCode: string) {
+  const rows = Array.from(ctx.db.drawingStroke.roomCode.filter(roomCode)) as any[]
+  rows.sort((a, b) => b.createdAtMs - a.createdAtMs)
+
+  if (rows.length <= MAX_DRAWING_STROKES) {
+    return
+  }
+
+  for (const row of rows.slice(MAX_DRAWING_STROKES)) {
+    ctx.db.drawingStroke.delete(row)
   }
 }
 
@@ -413,6 +470,71 @@ export const triggerSound = spacetimedb.reducer(
   },
 )
 
+export const addDrawingStroke = spacetimedb.reducer(
+  {
+    roomCode: t.string(),
+    sessionId: t.string(),
+    color: t.string(),
+    pointsJson: t.string(),
+  },
+  (ctx, args) => {
+    const roomCode = normalizeRoomCode(args.roomCode)
+    const sessionId = normalizeSessionId(args.sessionId)
+    const color = normalizeColor(args.color)
+    const pointsJson = normalizeDrawingPoints(args.pointsJson)
+
+    const room = getRoomOrThrow(ctx, roomCode)
+    const participant = ctx.db.participant.participantKey.find(
+      participantKey(roomCode, sessionId),
+    )
+
+    if (!participant) {
+      throw new SenderError('Join room before drawing.')
+    }
+
+    const currentTime = nowMs(ctx)
+
+    ctx.db.drawingStroke.insert({
+      strokeId: `${roomCode}-${sessionId}-${currentTime}`,
+      roomCode,
+      sessionId,
+      color,
+      pointsJson,
+      createdAtMs: currentTime,
+    })
+
+    replaceRoom(ctx, room, {
+      lastActivityAtMs: currentTime,
+    })
+
+    trimDrawingStrokes(ctx, roomCode)
+  },
+)
+
+export const clearDrawingStrokes = spacetimedb.reducer(
+  {
+    roomCode: t.string(),
+    ownerSessionId: t.string(),
+  },
+  (ctx, args) => {
+    const roomCode = normalizeRoomCode(args.roomCode)
+    const ownerSessionId = normalizeSessionId(args.ownerSessionId)
+    const room = getRoomOrThrow(ctx, roomCode)
+
+    if (room.ownerSessionId !== ownerSessionId) {
+      throw new SenderError('Only room owner can clear drawings.')
+    }
+
+    for (const stroke of ctx.db.drawingStroke.roomCode.filter(roomCode)) {
+      ctx.db.drawingStroke.delete(stroke)
+    }
+
+    replaceRoom(ctx, room, {
+      lastActivityAtMs: nowMs(ctx),
+    })
+  },
+)
+
 export const updateSoundboardPolicy = spacetimedb.reducer(
   {
     roomCode: t.string(),
@@ -457,6 +579,9 @@ export const cleanupRoom = spacetimedb.reducer(
     const currentTime = nowMs(ctx)
 
     if (participantCount === 0 && room.lastActivityAtMs < currentTime - ROOM_IDLE_TTL_MS) {
+      for (const stroke of ctx.db.drawingStroke.roomCode.filter(roomCode)) {
+        ctx.db.drawingStroke.delete(stroke)
+      }
       replaceRoom(ctx, room, {
         archived: true,
         lastActivityAtMs: currentTime,

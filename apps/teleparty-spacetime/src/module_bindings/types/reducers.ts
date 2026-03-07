@@ -6,7 +6,9 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddDrawingStrokeReducer from "../add_drawing_stroke_reducer";
 import CleanupRoomReducer from "../cleanup_room_reducer";
+import ClearDrawingStrokesReducer from "../clear_drawing_strokes_reducer";
 import CreateRoomReducer from "../create_room_reducer";
 import JoinRoomReducer from "../join_room_reducer";
 import LeaveRoomReducer from "../leave_room_reducer";
@@ -14,7 +16,9 @@ import TriggerSoundReducer from "../trigger_sound_reducer";
 import UpdateCursorReducer from "../update_cursor_reducer";
 import UpdateSoundboardPolicyReducer from "../update_soundboard_policy_reducer";
 
+export type AddDrawingStrokeParams = __Infer<typeof AddDrawingStrokeReducer>;
 export type CleanupRoomParams = __Infer<typeof CleanupRoomReducer>;
+export type ClearDrawingStrokesParams = __Infer<typeof ClearDrawingStrokesReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
 export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
 export type LeaveRoomParams = __Infer<typeof LeaveRoomReducer>;

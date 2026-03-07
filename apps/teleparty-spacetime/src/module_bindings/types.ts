@@ -10,6 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const DrawingStroke = __t.object("DrawingStroke", {
+  strokeId: __t.string(),
+  roomCode: __t.string(),
+  sessionId: __t.string(),
+  color: __t.string(),
+  pointsJson: __t.string(),
+  createdAtMs: __t.f64(),
+});
+export type DrawingStroke = __Infer<typeof DrawingStroke>;
+
 export const Participant = __t.object("Participant", {
   participantKey: __t.string(),
   roomCode: __t.string(),

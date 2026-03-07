@@ -29,22 +29,16 @@ export function StageCursor({
             filter: 'drop-shadow(0 6px 12px rgba(15, 23, 42, 0.28))',
           }}
         >
-          <svg
-            aria-hidden="true"
-            className="h-5 w-5"
-            viewBox="0 0 20 20"
-            fill="none"
+          <div
+            className="relative h-5 w-5 rounded-full border border-white/80"
+            style={{
+              background: `radial-gradient(circle at 35% 35%, rgba(255,255,255,0.92) 0%, ${color} 45%, color-mix(in srgb, ${color} 68%, black) 100%)`,
+            }}
           >
-            <path
-              d="M4 2.75V15.5L7.7 11.95L10.45 17.25L12.9 16L10.15 10.8L15.75 10.15L4 2.75Z"
-              fill={color}
-              stroke="rgba(255,255,255,0.92)"
-              strokeWidth="1.3"
-              strokeLinejoin="round"
-            />
-          </svg>
+            <div className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-white/30" />
+          </div>
         </div>
-        <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-white/60 bg-slate-950/78 px-2.5 py-1 text-[10px] font-semibold text-white shadow-lg shadow-slate-950/30 backdrop-blur-sm">
+        <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-white/55 bg-slate-950/72 px-2.5 py-1 text-[10px] font-semibold text-white shadow-lg shadow-slate-950/25 backdrop-blur-md">
           <span
             aria-hidden="true"
             className="size-2 rounded-full border border-white/70"

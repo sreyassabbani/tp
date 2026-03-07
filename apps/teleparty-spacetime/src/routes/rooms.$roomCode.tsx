@@ -5,6 +5,7 @@ import { reducers, tables } from '#/module_bindings'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { StageCursor } from '#/components/stage-cursor'
+import { StageDrawing } from '#/components/stage-drawing'
 import {
   Card,
   CardContent,
@@ -31,6 +32,12 @@ export const Route = createFileRoute('/rooms/$roomCode')({
 })
 
 const CURSOR_SEND_INTERVAL_MS = 40
+const MIN_DRAW_POINT_DELTA = 0.006
+
+type StagePoint = Readonly<{
+  x: number
+  y: number
+}>
 
 function sameSoundboardPolicy(
   left: SoundboardPolicy,
@@ -94,6 +101,49 @@ function soundboardPolicyToReducerInput(policy: SoundboardPolicy): {
   }
 }
 
+function hasPointMovedEnough(
+  previousPoint: StagePoint | undefined,
+  nextPoint: StagePoint,
+) {
+  if (!previousPoint) {
+    return true
+  }
+
+  return (
+    Math.abs(previousPoint.x - nextPoint.x) >= MIN_DRAW_POINT_DELTA ||
+    Math.abs(previousPoint.y - nextPoint.y) >= MIN_DRAW_POINT_DELTA
+  )
+}
+
+function parseStrokePoints(pointsJson: string): StagePoint[] {
+  try {
+    const parsed = JSON.parse(pointsJson)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.flatMap((point) => {
+      if (
+        !point ||
+        typeof point !== 'object' ||
+        typeof point.x !== 'number' ||
+        typeof point.y !== 'number'
+      ) {
+        return []
+      }
+
+      return [
+        {
+          x: point.x,
+          y: point.y,
+        },
+      ]
+    })
+  } catch {
+    return []
+  }
+}
+
 function RoomRoute() {
   const params = Route.useParams()
   const { sessionProfile, isHydrated } = useSessionProfile()
@@ -104,6 +154,8 @@ function RoomRoute() {
   const triggerSound = useReducer(reducers.triggerSound)
   const updateSoundboardPolicy = useReducer(reducers.updateSoundboardPolicy)
   const cleanupRoom = useReducer(reducers.cleanupRoom)
+  const addDrawingStroke = useReducer(reducers.addDrawingStroke)
+  const clearDrawingStrokes = useReducer(reducers.clearDrawingStrokes)
 
   const [hasJoined, setHasJoined] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
@@ -116,7 +168,11 @@ function RoomRoute() {
   )
 
   const [soundError, setSoundError] = useState<string | null>(null)
-  const [stageMode, setStageMode] = useState<'cursor' | 'interact'>('interact')
+  const [stageMode, setStageMode] = useState<'cursor' | 'draw' | 'interact'>(
+    'interact',
+  )
+  const [drawError, setDrawError] = useState<string | null>(null)
+  const [draftStroke, setDraftStroke] = useState<StagePoint[]>([])
   const [optimisticCursor, setOptimisticCursor] = useState<{
     color: string
     displayName: string
@@ -148,6 +204,12 @@ function RoomRoute() {
     tables.soundEvent.where((soundEvent) => soundEvent.roomCode.eq(activeRoomCode)),
   )
 
+  const [drawingStrokeRows, drawingStrokeRowsReady] = useTable(
+    tables.drawingStroke.where((drawingStroke) =>
+      drawingStroke.roomCode.eq(activeRoomCode),
+    ),
+  )
+
   const room = useMemo(() => {
     if (!roomCode) {
       return null
@@ -176,6 +238,21 @@ function RoomRoute() {
     return [...soundRows]
       .sort((a, b) => a.createdAtMs - b.createdAtMs)
   }, [roomCode, soundRows])
+
+  const roomDrawingStrokes = useMemo(() => {
+    if (!roomCode) {
+      return []
+    }
+
+    return [...drawingStrokeRows]
+      .sort((a, b) => a.createdAtMs - b.createdAtMs)
+      .map((stroke) => ({
+        color: stroke.color,
+        points: parseStrokePoints(stroke.pointsJson),
+        strokeId: stroke.strokeId,
+      }))
+      .filter((stroke) => stroke.points.length >= 2)
+  }, [drawingStrokeRows, roomCode])
 
   const roomPolicy = useMemo(() => {
     if (!room) {
@@ -300,12 +377,17 @@ function RoomRoute() {
   const lastCursorSentAt = useRef(0)
   const cursorFlushTimeout = useRef<number | null>(null)
   const cursorReducerInFlight = useRef(false)
+  const draftStrokeRef = useRef<StagePoint[]>([])
   const pendingCursorPayload = useRef<{
     roomCode: string
     sessionId: string
     x: number
     y: number
   } | null>(null)
+
+  useEffect(() => {
+    draftStrokeRef.current = draftStroke
+  }, [draftStroke])
 
   useEffect(() => {
     return () => {
@@ -396,6 +478,93 @@ function RoomRoute() {
     void flushCursorUpdate()
   }
 
+  function getStagePoint(
+    event: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>,
+  ): StagePoint | null {
+    const area = cursorContainerRef.current
+    if (!area) {
+      return null
+    }
+
+    const point = getRelativeCursorPosition(area.getBoundingClientRect(), event)
+    if (!point) {
+      return null
+    }
+
+    return {
+      x: point.x,
+      y: point.y,
+    }
+  }
+
+  function onDrawPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (stageMode !== 'draw' || !roomCode || !room || !hasJoined) {
+      return
+    }
+
+    const point = getStagePoint(event)
+    if (!point) {
+      return
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDrawError(null)
+    setDraftStroke([point])
+  }
+
+  function onDrawPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (stageMode !== 'draw' || draftStrokeRef.current.length === 0) {
+      return
+    }
+
+    const point = getStagePoint(event)
+    if (!point) {
+      return
+    }
+
+    setDraftStroke((currentStroke) => {
+      const lastPoint = currentStroke[currentStroke.length - 1]
+      if (!hasPointMovedEnough(lastPoint, point)) {
+        return currentStroke
+      }
+      return [...currentStroke, point]
+    })
+  }
+
+  async function commitDraftStroke() {
+    if (!roomCode || !room || !hasJoined || draftStrokeRef.current.length < 2) {
+      setDraftStroke([])
+      return
+    }
+
+    const strokeToCommit = draftStrokeRef.current
+    setDraftStroke([])
+
+    try {
+      await addDrawingStroke({
+        roomCode,
+        sessionId: sessionProfile.sessionId,
+        color: sessionProfile.color,
+        pointsJson: JSON.stringify(strokeToCommit),
+      })
+      setDrawError(null)
+    } catch (error) {
+      setDrawError(error instanceof Error ? error.message : 'Failed to save drawing.')
+    }
+  }
+
+  function onDrawPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (stageMode !== 'draw') {
+      return
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    void commitDraftStroke()
+  }
+
   async function onSoundButtonClick(soundId: (typeof sounds)[number]['id']) {
     if (!roomCode || !room || !hasJoined) {
       return
@@ -425,6 +594,22 @@ function RoomRoute() {
     })
 
     setOwnerDraftPolicy(null)
+  }
+
+  async function onClearDrawings() {
+    if (!roomCode || !room || !isOwner) {
+      return
+    }
+
+    try {
+      await clearDrawingStrokes({
+        roomCode,
+        ownerSessionId: sessionProfile.sessionId,
+      })
+      setDrawError(null)
+    } catch (error) {
+      setDrawError(error instanceof Error ? error.message : 'Failed to clear drawings.')
+    }
   }
 
   async function onPrivateRoomSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -491,6 +676,17 @@ function RoomRoute() {
     return Array.from(bySessionId.values())
   }, [optimisticCursor, roomParticipants])
 
+  const previewStroke = useMemo(() => {
+    if (draftStroke.length < 2) {
+      return null
+    }
+
+    return {
+      color: sessionProfile.color,
+      points: draftStroke,
+    }
+  }, [draftStroke, sessionProfile.color])
+
   useEffect(() => {
     setOptimisticCursor(null)
   }, [roomCode])
@@ -498,6 +694,7 @@ function RoomRoute() {
   useEffect(() => {
     if (stageMode === 'interact') {
       setOptimisticCursor(null)
+      setDraftStroke([])
     }
   }, [stageMode])
 
@@ -613,7 +810,8 @@ function RoomRoute() {
               <div>
                 <CardTitle>Shared Stage</CardTitle>
                 <CardDescription>
-                  Switch between direct video interaction and shared cursor mode.
+                  Interact keeps the iframe clickable. Cursor and Draw place an
+                  overlay on top of the video.
                 </CardDescription>
               </div>
               <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">
@@ -631,20 +829,48 @@ function RoomRoute() {
                 >
                   Cursor
                 </button>
+                <button
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${stageMode === 'draw' ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setStageMode('draw')}
+                  type="button"
+                >
+                  Draw
+                </button>
               </div>
             </div>
             <CardDescription>
               {stageMode === 'interact'
-                ? 'Video controls are enabled in interact mode.'
-                : 'Cursor mode streams movement to everyone in the room.'}
+                ? 'Video controls are enabled. Browser security prevents tracking mouse movement inside the embedded video at the same time.'
+                : stageMode === 'cursor'
+                  ? 'Cursor mode streams movement to everyone in the room.'
+                  : 'Draw mode lets you sketch over the stage for everyone in the room.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!participantRowsReady || !soundRowsReady ? (
+            {!participantRowsReady || !soundRowsReady || !drawingStrokeRowsReady ? (
               <p className="mb-3 text-sm text-muted-foreground">
                 Syncing live room state...
               </p>
             ) : null}
+            {drawError ? (
+              <p className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {drawError}
+              </p>
+            ) : null}
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                {stageMode === 'interact'
+                  ? 'Interact mode enables player controls.'
+                  : stageMode === 'cursor'
+                    ? 'Cursor mode captures the overlay to publish pointer movement.'
+                    : 'Draw mode captures the overlay to sketch on top of the stage.'}
+              </span>
+              {isOwner && roomDrawingStrokes.length > 0 ? (
+                <Button onClick={onClearDrawings} size="sm" type="button" variant="outline">
+                  Clear drawings
+                </Button>
+              ) : null}
+            </div>
             <div
               ref={cursorContainerRef}
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"
@@ -662,6 +888,16 @@ function RoomRoute() {
                 src={watchFrameUrl ?? room.watchUrl}
                 title={`Room ${room.roomCode} watch frame`}
               />
+              <StageDrawing previewStroke={previewStroke} strokes={roomDrawingStrokes} />
+              {stageMode === 'draw' ? (
+                <div
+                  className="absolute inset-2 cursor-crosshair rounded-xl"
+                  onPointerCancel={onDrawPointerUp}
+                  onPointerDown={onDrawPointerDown}
+                  onPointerMove={onDrawPointerMove}
+                  onPointerUp={onDrawPointerUp}
+                />
+              ) : null}
 
               {renderedParticipants.map((participant) => (
                 <StageCursor

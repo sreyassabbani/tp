@@ -4,6 +4,15 @@ export const DEFAULT_AUTO_SOUNDBOARD_CAPACITY = 8
 export const MIN_SOUNDBOARD_CAPACITY = 2
 export const MAX_SOUNDBOARD_CAPACITY = 64
 
+export const soundIdSchema = z.enum([
+  'airhorn',
+  'rimshot',
+  'cheer',
+  'boo',
+  'ta-da',
+  'whoosh',
+])
+
 export const roomCodeSchema = z
   .string()
   .trim()
@@ -68,6 +77,7 @@ export const roomJoinInputSchema = z.object({
 
 export type Visibility = z.infer<typeof visibilitySchema>
 export type SoundboardPolicy = z.infer<typeof soundboardPolicySchema>
+export type SoundId = z.infer<typeof soundIdSchema>
 
 export function normalizeAccessCode(value?: string): string {
   if (!value) {

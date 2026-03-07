@@ -89,4 +89,6 @@ The hot path is closer to:
 
 That is a better fit for cursor/presence-style state than the explicit query/mutation subscription loop in the Convex variant.
 
+The frontend also paints the local cursor optimistically, so your own cursor does not wait on replicated table updates before moving on screen.
+
 See [[realtime-comparison]].

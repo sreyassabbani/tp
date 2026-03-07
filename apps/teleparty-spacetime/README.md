@@ -7,8 +7,10 @@ TanStack Start + shadcn UI + SpacetimeDB v2.0 TypeScript module.
 - room creation from arbitrary watch URL
 - public/private rooms (private rooms use access code)
 - live cursor sync through participant table updates
+- shared drawing overlay through replicated Spacetime tables
 - soundboard events with participant-capacity gating
 - room-owner soundboard policy overrides
+- stage tool modes for `interact`, `cursor`, and `draw`
 
 ## Local run
 
@@ -29,6 +31,10 @@ direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
 - keep the module watcher running
 - refresh bindings when module source changes
 - run the Vite web app
+
+If you are not using `spacetime:dev` and you change `spacetimedb/src/index.ts`,
+you must rerun publish + binding generation before the web app matches the backend
+schema.
 
 Manual fallback:
 

@@ -37,6 +37,9 @@ Stores room metadata and room-wide soundboard settings.
 ### `participant`
 Stores participant presence and cursor state directly in the replicated table.
 
+### `drawingStroke`
+Stores shared overlay drawing strokes per room.
+
 ### `soundEvent`
 Stores recent soundboard events.
 
@@ -45,9 +48,11 @@ Stores recent soundboard events.
 ## Reducers
 
 Key reducers:
+- `addDrawingStroke`
 - `createRoom`
 - `joinRoom`
 - `leaveRoom`
+- `clearDrawingStrokes`
 - `updateCursor`
 - `triggerSound`
 - `updateSoundboardPolicy`
@@ -64,9 +69,10 @@ The frontend reads tables through generated hooks such as `useTable(...)`.
 Examples:
 - room rows filtered by `roomCode`
 - participant rows filtered by `roomCode`
+- drawing stroke rows filtered by `roomCode`
 - sound event rows filtered by `roomCode`
 
-Because the participant table already carries cursor state, the room page does not need a second query just to render cursors.
+Because the participant table already carries cursor state, the room page does not need a second query just to render cursors. Drawing overlay state is likewise read directly from replicated table rows.
 
 ---
 
@@ -90,5 +96,7 @@ The hot path is closer to:
 That is a better fit for cursor/presence-style state than the explicit query/mutation subscription loop in the Convex variant.
 
 The frontend also paints the local cursor optimistically, so your own cursor does not wait on replicated table updates before moving on screen.
+
+The room page also batches cursor publishes through a short client-side send interval instead of emitting every raw device event. That keeps the motion feeling live without turning the reducer stream into unnecessary noise.
 
 See [[realtime-comparison]].

@@ -75,11 +75,19 @@ The UI does not trust raw strings late. It parses early:
 See [[domain-model]].
 
 ### Stage Interaction Modes
-The room stage uses two local modes:
+The room stage uses three local modes:
 - `cursor` - shared cursor tracking stays active over the stage
+- `draw` - a drawing overlay captures pointer input and writes shared strokes
 - `interact` - the iframe becomes clickable so the user can start or control playback
 
 This is a browser limitation tradeoff, not a backend limitation. Cross-origin iframes swallow pointer events.
+
+### Why The Cursor Feels Smoother In Spacetime
+The Spacetime room view does two things to keep movement feeling immediate:
+- it paints your own cursor optimistically in local React state before replicated rows catch up
+- it throttles reducer writes into a short sampled stream instead of firing every raw pointer event
+
+That combination reduces visible lag without trying to mirror every single device event.
 
 ---
 

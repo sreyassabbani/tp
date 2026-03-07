@@ -43,25 +43,25 @@ Obsidian setup is checked in under `docs/.obsidian`, so you can open `docs/` dir
 ```bash
 cd /Users/sreysus/workflow/tp
 direnv allow
-nu scripts/tasks.nu bootstrap
+just bootstrap
 ```
 
 Convex flow:
 
 ```bash
-nu scripts/tasks.nu convex-dev
+just convex-dev
 ```
 
 Spacetime flow:
 
 ```bash
-nu scripts/tasks.nu spacetime-dev
+just spacetime-dev
 ```
 
 Build both:
 
 ```bash
-nu scripts/tasks.nu build-all
+just build-all
 ```
 
 ---
@@ -79,7 +79,7 @@ tp/
 |     `- src/             # TanStack Start frontend + generated bindings
 |- docs/                  # This documentation vault
 |- AGENTS.md              # Repo-specific instructions for coding agents
-|- justfile               # Compatibility wrappers around the Nu tasks
+|- justfile               # Canonical dev commands, implemented in Nu
 `- README.md              # High-level repo summary
 ```
 
@@ -97,4 +97,4 @@ This repo is not just a single app. It is a side-by-side lab for comparing two r
 
 If you are trying to understand why one implementation feels better than the other, start with [[realtime-comparison]].
 
-If you want the easiest local workflows, use `nu scripts/tasks.nu convex-dev` or `nu scripts/tasks.nu spacetime-dev`. The split subcommands still exist, but only as manual fallbacks.
+If you want the easiest local workflows, use `just convex-dev` or `just spacetime-dev`. The split subcommands still exist, but only as manual fallbacks.

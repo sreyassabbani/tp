@@ -6,7 +6,7 @@ tags: [reference, commands, dev]
 
 <- [[index|Home]]
 
-Use `nu scripts/tasks.nu` from the repo root. It is the canonical entry point.
+Use `just` from the repo root. It is the canonical entry point. The recipe implementations live in Nu.
 
 ---
 
@@ -14,7 +14,7 @@ Use `nu scripts/tasks.nu` from the repo root. It is the canonical entry point.
 
 ```bash
 cd /Users/sreysus/workflow/tp
-nu scripts/tasks.nu bootstrap
+just bootstrap
 ```
 
 Installs Bun dependencies for:
@@ -29,7 +29,7 @@ Installs Bun dependencies for:
 Recommended:
 
 ```bash
-nu scripts/tasks.nu convex-dev
+just convex-dev
 ```
 
 This runs the backend sync and web client together, and waits for `VITE_CONVEX_URL` before booting Vite.
@@ -37,8 +37,8 @@ This runs the backend sync and web client together, and waits for `VITE_CONVEX_U
 Manual fallback:
 
 ```bash
-nu scripts/tasks.nu convex-backend
-nu scripts/tasks.nu convex-web
+just convex-backend
+just convex-web
 ```
 
 Manual equivalents:
@@ -60,7 +60,7 @@ cd apps/teleparty-convex
 Recommended:
 
 ```bash
-nu scripts/tasks.nu spacetime-dev
+just spacetime-dev
 ```
 
 This uses the repo wrapper to:
@@ -97,14 +97,14 @@ The repo used to expose the split flow more prominently, which made Spacetime fe
 Build both:
 
 ```bash
-nu scripts/tasks.nu build-all
+just build-all
 ```
 
 Build one app:
 
 ```bash
-nu scripts/tasks.nu convex-build
-nu scripts/tasks.nu spacetime-build
+just convex-build
+just spacetime-build
 ```
 
 ---

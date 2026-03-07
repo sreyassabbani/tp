@@ -29,61 +29,59 @@ The dev shell is pinned to DeterminateSystems weekly nixpkgs and includes:
 
 ## Quick start
 
-## Nu workflow
+## Justfile workflow
 
-Use the Nu task runner from the repo root as the canonical workflow:
+Use `just` from the repo root as the canonical workflow. The recipes are implemented in Nu under the hood.
 
 ```bash
 cd /Users/sreysus/workflow/tp
-nu scripts/tasks.nu bootstrap
+just bootstrap
 ```
 
 Convex flow (recommended, one terminal):
 
 ```bash
-nu scripts/tasks.nu convex-dev
+just convex-dev
 ```
 
 Convex flow (manual / advanced split):
 
 ```bash
-nu scripts/tasks.nu convex-backend
-nu scripts/tasks.nu convex-web
+just convex-backend
+just convex-web
 ```
 
 Spacetime flow (recommended, one terminal):
 
 ```bash
-nu scripts/tasks.nu spacetime-dev
+just spacetime-dev
 ```
 
 Spacetime flow (manual / advanced split):
 
 ```bash
-nu scripts/tasks.nu spacetime-db
-nu scripts/tasks.nu spacetime-sync
-nu scripts/tasks.nu spacetime-web
+just spacetime-db
+just spacetime-sync
+just spacetime-web
 ```
 
 Build flow:
 
 ```bash
-nu scripts/tasks.nu build-all
+just build-all
 ```
 
 Command/process summary:
 
-- `nu scripts/tasks.nu bootstrap`: installs Bun dependencies in all relevant packages.
-- `nu scripts/tasks.nu convex-dev`: starts Convex backend sync, waits for the generated local URL, and then starts the web client on port `3001`.
-- `nu scripts/tasks.nu convex-backend`: starts Convex backend/dev sync and keeps `.env.local` endpoints current.
-- `nu scripts/tasks.nu convex-web`: starts the Convex web client on port `3001`.
-- `nu scripts/tasks.nu spacetime-dev`: starts local SpacetimeDB dev mode, republishes/regenerates on changes, and runs the web client on port `3002`.
-- `nu scripts/tasks.nu spacetime-db`: starts local SpacetimeDB on `127.0.0.1:3010` with data in `.spacetime/data`.
-- `nu scripts/tasks.nu spacetime-sync`: publishes the Spacetime module and regenerates typed bindings.
-- `nu scripts/tasks.nu spacetime-web`: starts the Spacetime web client on port `3002`.
-- `nu scripts/tasks.nu build-all`: runs production builds for both implementations.
-
-The `justfile` remains as a thin compatibility wrapper, but the real task logic now lives in Nu.
+- `just bootstrap`: installs Bun dependencies in all relevant packages.
+- `just convex-dev`: starts Convex backend sync, waits for the generated local URL, and then starts the web client on port `3001`.
+- `just convex-backend`: starts Convex backend/dev sync and keeps `.env.local` endpoints current.
+- `just convex-web`: starts the Convex web client on port `3001`.
+- `just spacetime-dev`: starts local SpacetimeDB dev mode, republishes/regenerates on changes, and runs the web client on port `3002`.
+- `just spacetime-db`: starts local SpacetimeDB on `127.0.0.1:3010` with data in `.spacetime/data`.
+- `just spacetime-sync`: publishes the Spacetime module and regenerates typed bindings.
+- `just spacetime-web`: starts the Spacetime web client on port `3002`.
+- `just build-all`: runs production builds for both implementations.
 
 ### Convex version
 
@@ -91,7 +89,7 @@ Recommended:
 
 ```bash
 cd /Users/sreysus/workflow/tp
-nu scripts/tasks.nu convex-dev
+just convex-dev
 ```
 
 Why this is simpler:
@@ -125,7 +123,7 @@ Recommended:
 
 ```bash
 cd /Users/sreysus/workflow/tp
-nu scripts/tasks.nu spacetime-dev
+just spacetime-dev
 ```
 
 Why this is simpler:

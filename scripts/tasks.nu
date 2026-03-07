@@ -6,23 +6,6 @@ const SPACETIME_DIR = (path self ../apps/teleparty-spacetime | path expand)
 const CONVEX_ENV_FILE = ($CONVEX_DIR | path join ".env.local")
 const SPACETIME_PID_FILE = ($SPACETIME_DIR | path join ".spacetime" "data" "spacetime.pid")
 
-def usage [] {
-  print "Nu task runner"
-  print ""
-  print "Commands:"
-  print "  bootstrap"
-  print "  convex-backend"
-  print "  convex-web"
-  print "  convex-dev"
-  print "  convex-build"
-  print "  spacetime-db"
-  print "  spacetime-sync"
-  print "  spacetime-web"
-  print "  spacetime-dev"
-  print "  spacetime-build"
-  print "  build-all"
-}
-
 def run-in-direnv [cwd: string, ...cmd: string] {
   cd $cwd
   ^direnv exec $ROOT ...$cmd
@@ -225,7 +208,7 @@ def build-all [] {
 
 def main [command?: string] {
   match $command {
-    null => { usage }
+    null => { error make { msg: "Use the repo justfile to run tasks." } }
     "bootstrap" => { bootstrap }
     "convex-backend" => { convex-backend }
     "convex-web" => { convex-web }
@@ -238,8 +221,7 @@ def main [command?: string] {
     "spacetime-build" => { spacetime-build }
     "build-all" => { build-all }
     _ => {
-      usage
-      error make { msg: $"Unknown command: ($command)" }
+      error make { msg: $"Unknown internal task: ($command)" }
     }
   }
 }

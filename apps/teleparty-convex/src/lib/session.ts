@@ -15,6 +15,13 @@ const sessionSchema = sessionProfileBaseSchema.extend({
 
 export type SessionProfile = z.infer<typeof sessionSchema>
 
+export const SESSION_PROFILE_PLACEHOLDER: SessionProfile = {
+  sessionId: 'pending-session-id',
+  sessionSecret: 'pendingownersessionsecret00000000',
+  displayName: 'Loading User',
+  color: '#f97316',
+}
+
 const storageKey = 'tp-convex-session-v1'
 const makeId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 20)
 const makeSecret = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 32)

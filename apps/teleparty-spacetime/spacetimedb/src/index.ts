@@ -98,19 +98,32 @@ function normalizeSessionId(value: string): string {
   return sessionId
 }
 
-function normalizeWatchUrl(raw: string): string {
-  let parsed: URL
-  try {
-    parsed = new URL(raw)
-  } catch {
+type ParsedWatchUrl = {
+  normalized: string
+  host: string
+}
+
+function parseWatchUrl(raw: string): ParsedWatchUrl {
+  const trimmed = raw.trim()
+  const match = trimmed.match(
+    /^(https?):\/\/((?:[a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+|\[[a-fA-F0-9:.]+\])(?::\d{1,5})?(?:\/[^\s]*)?$/iu,
+  )
+
+  if (!match) {
     throw new SenderError('Watch URL must be a valid URL.')
   }
 
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new SenderError('Watch URL must use http or https.')
+  const protocol = match[1]?.toLowerCase()
+  const authority = match[2]
+  if (!protocol || !authority) {
+    throw new SenderError('Watch URL must be a valid URL.')
   }
 
-  return parsed.toString()
+  const host = authority.toLowerCase()
+  return {
+    normalized: trimmed,
+    host,
+  }
 }
 
 function normalizeColor(value: string): string {
@@ -203,8 +216,7 @@ export const createRoom = spacetimedb.reducer(
     const roomCode = normalizeRoomCode(args.roomCode)
     const ownerSessionId = normalizeSessionId(args.ownerSessionId)
     const ownerDisplayName = normalizeDisplayName(args.ownerDisplayName)
-    const watchUrl = normalizeWatchUrl(args.watchUrl)
-    const watchHost = new URL(watchUrl).host
+    const { normalized: watchUrl, host: watchHost } = parseWatchUrl(args.watchUrl)
 
     if (ctx.db.room.roomCode.find(roomCode)) {
       throw new SenderError('Room code already exists. Generate a new code.')

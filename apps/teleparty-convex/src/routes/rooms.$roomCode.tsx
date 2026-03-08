@@ -398,7 +398,7 @@ function RoomRoute() {
     setOptimisticCursor(null)
   }, [roomCode])
 
-  async function onCursorMove(event: React.MouseEvent<HTMLDivElement>) {
+  async function onCursorMove(event: React.PointerEvent<HTMLDivElement>) {
     if (!roomCode || roomLookup?.kind !== 'ok') {
       return
     }
@@ -718,8 +718,8 @@ function RoomRoute() {
             <div
               ref={cursorContainerRef}
               className="relative h-[420px] rounded-2xl border border-border/70 bg-muted/30"
-              onMouseMove={stageIsInteractive ? undefined : onCursorMove}
-              onMouseLeave={() => {
+              onPointerMove={stageIsInteractive ? undefined : onCursorMove}
+              onPointerLeave={() => {
                 lastCursorSentAt.current = 0
               }}
             >

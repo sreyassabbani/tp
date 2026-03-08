@@ -144,6 +144,7 @@ function RouteComponent() {
     }
   }, [participantCountByRoom, participantsReady, publicRooms, roomsReady])
 
+  const showingCachedPublicRooms = !roomsReady || !participantsReady
   const displayedPublicRooms = roomsReady && participantsReady
     ? publicRooms.map((room) => ({
         roomCode: room.roomCode,
@@ -476,8 +477,12 @@ function RouteComponent() {
             {displayedPublicRooms.map((room) => (
               <button
                 key={room.roomCode}
-                className="rounded-2xl border border-border/70 bg-background/70 p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/50"
+                className={`rounded-2xl border border-border/70 bg-background/70 p-4 text-left transition ${showingCachedPublicRooms ? 'cursor-wait opacity-75' : 'hover:-translate-y-0.5 hover:border-primary/50'}`}
+                disabled={showingCachedPublicRooms}
                 onClick={() => {
+                  if (showingCachedPublicRooms) {
+                    return
+                  }
                   navigate({
                     to: '/rooms/$roomCode',
                     params: { roomCode: room.roomCode },

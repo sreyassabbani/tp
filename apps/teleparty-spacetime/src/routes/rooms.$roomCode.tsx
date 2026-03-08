@@ -33,22 +33,10 @@ export const Route = createFileRoute('/rooms/$roomCode')({
 
 const CURSOR_SEND_INTERVAL_MS = 40
 const MIN_DRAW_POINT_DELTA = 0.006
-const roomCacheKeyPrefix = 'tp-spacetime-room-v1:'
 
 type StagePoint = Readonly<{
   x: number
   y: number
-}>
-
-type CachedRoomSnapshot = Readonly<{
-  autoSoundboardCapacity: number
-  manualSoundboardCapacity: number
-  manualSoundboardEnabled: boolean
-  ownerDisplayName: string
-  roomCode: string
-  soundboardMode: string
-  visibility: string
-  watchUrl: string
 }>
 
 function sameSoundboardPolicy(
@@ -156,46 +144,6 @@ function parseStrokePoints(pointsJson: string): StagePoint[] {
   }
 }
 
-function readCachedRoom(roomCode: string | null): CachedRoomSnapshot | null {
-  if (typeof window === 'undefined' || !roomCode) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(`${roomCacheKeyPrefix}${roomCode}`) ?? 'null',
-    )
-
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.roomCode !== 'string' ||
-      typeof parsed.ownerDisplayName !== 'string' ||
-      typeof parsed.watchUrl !== 'string' ||
-      typeof parsed.visibility !== 'string' ||
-      typeof parsed.soundboardMode !== 'string' ||
-      typeof parsed.autoSoundboardCapacity !== 'number' ||
-      typeof parsed.manualSoundboardCapacity !== 'number' ||
-      typeof parsed.manualSoundboardEnabled !== 'boolean'
-    ) {
-      return null
-    }
-
-    return {
-      roomCode: parsed.roomCode,
-      ownerDisplayName: parsed.ownerDisplayName,
-      watchUrl: parsed.watchUrl,
-      visibility: parsed.visibility,
-      soundboardMode: parsed.soundboardMode,
-      autoSoundboardCapacity: parsed.autoSoundboardCapacity,
-      manualSoundboardCapacity: parsed.manualSoundboardCapacity,
-      manualSoundboardEnabled: parsed.manualSoundboardEnabled,
-    }
-  } catch {
-    return null
-  }
-}
-
 function RoomRoute() {
   const params = Route.useParams()
   const { sessionProfile, isHydrated } = useSessionProfile()
@@ -224,6 +172,7 @@ function RoomRoute() {
     'interact',
   )
   const [drawError, setDrawError] = useState<string | null>(null)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
   const [draftStroke, setDraftStroke] = useState<StagePoint[]>([])
   const [optimisticCursor, setOptimisticCursor] = useState<{
     color: string
@@ -233,8 +182,6 @@ function RoomRoute() {
     x: number
     y: number
   } | null>(null)
-  const [cachedRoom, setCachedRoom] = useState<CachedRoomSnapshot | null>(null)
-
   const roomCode = useMemo(() => {
     try {
       return normalizeRoomCode(params.roomCode)
@@ -263,41 +210,13 @@ function RoomRoute() {
     ),
   )
 
-  useEffect(() => {
-    setCachedRoom(readCachedRoom(roomCode))
-  }, [roomCode])
-
   const liveRoom = useMemo(() => {
     if (!roomCode) {
       return null
     }
     return roomRows[0] ?? null
   }, [roomCode, roomRows])
-
-  useEffect(() => {
-    if (!liveRoom || typeof window === 'undefined') {
-      return
-    }
-
-    const snapshot: CachedRoomSnapshot = {
-      roomCode: liveRoom.roomCode,
-      ownerDisplayName: liveRoom.ownerDisplayName,
-      watchUrl: liveRoom.watchUrl,
-      visibility: liveRoom.visibility,
-      soundboardMode: liveRoom.soundboardMode,
-      autoSoundboardCapacity: liveRoom.autoSoundboardCapacity,
-      manualSoundboardCapacity: liveRoom.manualSoundboardCapacity,
-      manualSoundboardEnabled: liveRoom.manualSoundboardEnabled,
-    }
-
-    setCachedRoom(snapshot)
-    window.localStorage.setItem(
-      `${roomCacheKeyPrefix}${liveRoom.roomCode}`,
-      JSON.stringify(snapshot),
-    )
-  }, [liveRoom])
-
-  const room = roomRowsReady ? liveRoom : liveRoom ?? cachedRoom
+  const room = liveRoom
 
   const watchFrameUrl = useMemo(() => {
     if (!room) {
@@ -669,13 +588,19 @@ function RoomRoute() {
       return
     }
 
-    await updateSoundboardPolicy({
-      roomCode,
-      ownerSessionId: sessionProfile.sessionId,
-      ...soundboardPolicyToReducerInput(effectiveOwnerPolicy),
-    })
-
-    setOwnerDraftPolicy(null)
+    try {
+      await updateSoundboardPolicy({
+        roomCode,
+        ownerSessionId: sessionProfile.sessionId,
+        ...soundboardPolicyToReducerInput(effectiveOwnerPolicy),
+      })
+      setOwnerDraftPolicy(null)
+      setSettingsError(null)
+    } catch (error) {
+      setSettingsError(
+        error instanceof Error ? error.message : 'Failed to save owner settings.',
+      )
+    }
   }
 
   async function onClearDrawings() {
@@ -931,9 +856,7 @@ function RoomRoute() {
           <CardContent>
             {!participantRowsReady || !soundRowsReady || !drawingStrokeRowsReady ? (
               <p className="mb-3 text-sm text-muted-foreground">
-                {cachedRoom && !liveRoom
-                  ? 'Refreshing live room state...'
-                  : 'Syncing live room state...'}
+                Syncing live room state...
               </p>
             ) : null}
             {drawError ? (
@@ -1145,6 +1068,12 @@ function RoomRoute() {
                     }}
                   />
                 </div>
+
+                {settingsError ? (
+                  <p className="m-0 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {settingsError}
+                  </p>
+                ) : null}
 
                 <Button
                   disabled={!settingsDirty}

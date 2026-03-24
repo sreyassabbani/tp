@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;700&family=Work+Sans:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+:root {
+	color-scheme: light;
+	--font-display: 'Fraunces', Georgia, serif;
+	--font-body: 'Work Sans', 'Segoe UI', sans-serif;
+	--paper: oklch(97% 0.012 70);
+	--paper-shadow: oklch(90% 0.018 72);
+	--ink: oklch(26% 0.03 28);
+	--ink-soft: oklch(45% 0.02 34);
+	--line-soft: color-mix(in oklch, var(--ink) 14%, white 86%);
+	--signal: oklch(62% 0.17 42);
+	--signal-strong: oklch(56% 0.18 38);
+	--signal-wash: oklch(86% 0.07 50);
+	--moss: oklch(51% 0.08 156);
+	--alert: oklch(62% 0.18 28);
+	--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+html {
+	background:
+		radial-gradient(circle at top, rgba(214, 144, 62, 0.18), transparent 26%),
+		radial-gradient(circle at 85% 0%, rgba(40, 121, 96, 0.1), transparent 20%),
+		linear-gradient(180deg, oklch(98% 0.01 70), oklch(95% 0.012 58));
+}
+
+body {
+	position: relative;
+	min-height: 100vh;
+	margin: 0;
+	color: var(--ink);
+	font-family: var(--font-body);
+	background: transparent;
+}
+
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background:
+		repeating-linear-gradient(
+			90deg,
+			rgba(91, 66, 32, 0.02) 0 1px,
+			transparent 1px 28px
+		),
+		repeating-linear-gradient(
+			0deg,
+			rgba(91, 66, 32, 0.018) 0 1px,
+			transparent 1px 28px
+		);
+	mix-blend-mode: multiply;
+}
+
+::selection {
+	background: color-mix(in oklch, var(--signal-wash) 72%, transparent 28%);
+	color: var(--ink);
+}
+
+a,
+button,
+input,
+textarea {
+	font: inherit;
+}
+
+button {
+	appearance: none;
+}
+
+input,
+textarea,
+button {
+	min-width: 0;
+}
+
+.shell {
+	width: min(1180px, calc(100vw - 1.6rem));
+	margin-inline: auto;
+	padding: 1.35rem 0 4rem;
+}
+
+.panel {
+	position: relative;
+	border: 1px solid var(--line-soft);
+	border-radius: 2rem;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 241, 230, 0.92));
+	box-shadow:
+		0 30px 60px rgba(78, 56, 28, 0.12),
+		inset 0 1px 0 rgba(255, 255, 255, 0.82);
+	backdrop-filter: blur(18px);
+}
+
+.eyebrow {
+	margin: 0;
+	color: var(--signal);
+	font-size: 0.76rem;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}

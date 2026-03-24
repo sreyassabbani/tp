@@ -3,6 +3,7 @@
 const ROOT = (path self .. | path expand)
 const CONVEX_DIR = (path self ../apps/teleparty-convex | path expand)
 const SPACETIME_DIR = (path self ../apps/teleparty-spacetime | path expand)
+const SVELTEKIT_DIR = (path self ../apps/teleparty-sveltekit | path expand)
 const CONVEX_ENV_FILE = ($CONVEX_DIR | path join ".env.local")
 const SPACETIME_PID_FILE = ($SPACETIME_DIR | path join ".spacetime" "data" "spacetime.pid")
 
@@ -69,6 +70,7 @@ def bootstrap [] {
   run-in-direnv $CONVEX_DIR bun install
   run-in-direnv $SPACETIME_DIR bun install
   run-in-direnv ($SPACETIME_DIR | path join "spacetimedb") bun install
+  run-in-direnv $SVELTEKIT_DIR bun install
 }
 
 def convex-backend [] {
@@ -135,6 +137,15 @@ def spacetime-web [] {
 def spacetime-build [] {
   run-in-direnv $SPACETIME_DIR bun run spacetime:build
   run-in-direnv $SPACETIME_DIR bun run build
+}
+
+def sveltekit-dev [] {
+  run-in-direnv $SVELTEKIT_DIR bun run dev '--' '--host' '127.0.0.1' '--port' '3003'
+}
+
+def sveltekit-build [] {
+  run-in-direnv $SVELTEKIT_DIR bun run check
+  run-in-direnv $SVELTEKIT_DIR bun run build
 }
 
 def spacetime-dev [] {
@@ -219,6 +230,8 @@ def main [command?: string] {
     "spacetime-web" => { spacetime-web }
     "spacetime-dev" => { spacetime-dev }
     "spacetime-build" => { spacetime-build }
+    "sveltekit-dev" => { sveltekit-dev }
+    "sveltekit-build" => { sveltekit-build }
     "build-all" => { build-all }
     _ => {
       error make { msg: $"Unknown internal task: ($command)" }

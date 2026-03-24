@@ -36,4 +36,10 @@ spacetime-web:
 spacetime-build:
   nu {{root}}/scripts/tasks.nu spacetime-build
 
+sveltekit-dev:
+  nu {{root}}/scripts/tasks.nu sveltekit-dev
+
+sveltekit-build:
+  nu {{root}}/scripts/tasks.nu sveltekit-build
+
 build-all: convex-build spacetime-build

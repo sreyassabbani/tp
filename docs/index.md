@@ -9,6 +9,10 @@ Welcome to the Teleparty Clone Lab documentation vault. This repo contains two i
 - `apps/teleparty-convex` - TanStack Start + Convex
 - `apps/teleparty-spacetime` - TanStack Start + SpacetimeDB
 
+It also contains one experimental frontend spike:
+
+- `apps/teleparty-sveltekit` - SvelteKit local-first design and interaction prototype
+
 Both variants aim for feature parity, but the realtime transport and backend programming model are intentionally different.
 
 Obsidian setup is checked in under `docs/.obsidian`, so you can open `docs/` directly as a vault.
@@ -58,6 +62,12 @@ Spacetime flow:
 just spacetime-dev
 ```
 
+Experimental SvelteKit spike:
+
+```bash
+just sveltekit-dev
+```
+
 Build both:
 
 ```bash
@@ -74,9 +84,11 @@ tp/
 |  |- teleparty-convex/
 |  |  |- convex/          # Convex schema + functions
 |  |  `- src/             # TanStack Start frontend
-|  `- teleparty-spacetime/
+|  |- teleparty-spacetime/
 |     |- spacetimedb/     # SpacetimeDB module source
 |     `- src/             # TanStack Start frontend + generated bindings
+|  `- teleparty-sveltekit/
+|     `- src/             # SvelteKit local-first spike
 |- docs/                  # This documentation vault
 |- AGENTS.md              # Repo-specific instructions for coding agents
 |- justfile               # Canonical dev commands, implemented in Nu

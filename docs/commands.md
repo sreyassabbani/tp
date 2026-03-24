@@ -21,6 +21,7 @@ Installs Bun dependencies for:
 - `apps/teleparty-convex`
 - `apps/teleparty-spacetime`
 - `apps/teleparty-spacetime/spacetimedb`
+- `apps/teleparty-sveltekit`
 
 ---
 
@@ -107,6 +108,13 @@ just convex-build
 just spacetime-build
 ```
 
+Experimental spike:
+
+```bash
+just sveltekit-dev
+just sveltekit-build
+```
+
 ---
 
 ## Useful Verification Commands
@@ -139,6 +147,7 @@ direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
 |------|---------|
 | `3001` | Convex web app |
 | `3002` | Spacetime web app |
+| `3003` | Experimental SvelteKit spike |
 | `3010` | Local SpacetimeDB server |
 
 Convex backend endpoint is managed through `.env.local` rather than a fixed human-facing port in this repo.

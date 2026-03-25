@@ -11,7 +11,7 @@ Welcome to the Teleparty Clone Lab documentation vault. This repo contains two i
 
 It also contains one experimental frontend spike:
 
-- `apps/teleparty-sveltekit` - SvelteKit local-first design and interaction prototype
+- `apps/teleparty-sveltekit` - SvelteKit design and interaction prototype wired to the Convex backend
 
 Both variants aim for feature parity, but the realtime transport and backend programming model are intentionally different.
 
@@ -88,7 +88,7 @@ tp/
 |     |- spacetimedb/     # SpacetimeDB module source
 |     `- src/             # TanStack Start frontend + generated bindings
 |  `- teleparty-sveltekit/
-|     `- src/             # SvelteKit local-first spike
+|     `- src/             # SvelteKit frontend experiment on Convex
 |- docs/                  # This documentation vault
 |- AGENTS.md              # Repo-specific instructions for coding agents
 |- justfile               # Canonical dev commands, implemented in Nu

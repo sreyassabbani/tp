@@ -35,6 +35,75 @@ def convex-env-ready [] {
   $env_text | str contains "VITE_CONVEX_URL="
 }
 
+def convex-public-url [] {
+  if not (convex-env-ready) {
+    error make { msg: $"Missing VITE_CONVEX_URL in ($CONVEX_ENV_FILE). Run the Convex backend sync first." }
+  }
+
+  let url_line = (
+    open --raw $CONVEX_ENV_FILE
+    | lines
+    | where ($it | str starts-with "VITE_CONVEX_URL=")
+    | first
+  )
+
+  if ($url_line | is-empty) {
+    error make { msg: $"Unable to read VITE_CONVEX_URL from ($CONVEX_ENV_FILE)." }
+  }
+
+  $url_line | str replace "VITE_CONVEX_URL=" ""
+}
+
+def ensure-convex-env-ready [] {
+  if (convex-env-ready) {
+    return
+  }
+
+  run-in-direnv $CONVEX_DIR bun run convex:dev:once
+
+  if not (convex-env-ready) {
+    error make { msg: $"Convex backend sync did not produce VITE_CONVEX_URL in ($CONVEX_ENV_FILE)." }
+  }
+}
+
+def spawn-convex-backend-sync [] {
+  let backend_job = (job spawn --tag "convex-backend" {
+    cd $CONVEX_DIR
+    ^direnv exec $ROOT bun run convex:dev
+  })
+
+  mut ready = false
+  for _ in 1..120 {
+    if (convex-env-ready) {
+      $ready = true
+      break
+    }
+
+    if not (job-running $backend_job) {
+      safe-job-kill $backend_job
+      error make { msg: "Convex backend exited before VITE_CONVEX_URL was written." }
+    }
+
+    sleep 1sec
+  }
+
+  if not $ready {
+    safe-job-kill $backend_job
+    error make { msg: $"Timed out waiting for Convex to write VITE_CONVEX_URL to ($CONVEX_ENV_FILE)" }
+  }
+
+  $backend_job
+}
+
+def run-sveltekit-with-convex-url [...cmd: string] {
+  ensure-convex-env-ready
+  let public_convex_url = (convex-public-url)
+
+  with-env { PUBLIC_CONVEX_URL: $public_convex_url } {
+    run-in-direnv $SVELTEKIT_DIR ...$cmd
+  }
+}
+
 def is-spacetime-listening [] {
   let result = (^lsof -iTCP:3010 -sTCP:LISTEN -n -P | complete)
   $result.exit_code == 0
@@ -86,30 +155,7 @@ def convex-build [] {
 }
 
 def convex-dev [] {
-  let backend_job = (job spawn --tag "convex-backend" {
-    cd $CONVEX_DIR
-    ^direnv exec $ROOT bun run convex:dev
-  })
-
-  mut ready = false
-  for _ in 1..120 {
-    if (convex-env-ready) {
-      $ready = true
-      break
-    }
-
-    if not (job-running $backend_job) {
-      safe-job-kill $backend_job
-      error make { msg: "Convex backend exited before VITE_CONVEX_URL was written." }
-    }
-
-    sleep 1sec
-  }
-
-  if not $ready {
-    safe-job-kill $backend_job
-    error make { msg: $"Timed out waiting for Convex to write VITE_CONVEX_URL to ($CONVEX_ENV_FILE)" }
-  }
+  let backend_job = (spawn-convex-backend-sync)
 
   try {
     run-in-direnv $CONVEX_DIR bun run dev
@@ -140,12 +186,21 @@ def spacetime-build [] {
 }
 
 def sveltekit-dev [] {
-  run-in-direnv $SVELTEKIT_DIR bun run dev '--' '--host' '127.0.0.1' '--port' '3003'
+  let backend_job = (spawn-convex-backend-sync)
+
+  try {
+    run-sveltekit-with-convex-url bun run dev '--' '--host' '127.0.0.1' '--port' '3003'
+  } catch {|err|
+    safe-job-kill $backend_job
+    error make $err
+  }
+
+  safe-job-kill $backend_job
 }
 
 def sveltekit-build [] {
-  run-in-direnv $SVELTEKIT_DIR bun run check
-  run-in-direnv $SVELTEKIT_DIR bun run build
+  run-sveltekit-with-convex-url bun run check
+  run-sveltekit-with-convex-url bun run build
 }
 
 def spacetime-dev [] {

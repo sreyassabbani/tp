@@ -9,7 +9,7 @@ This repo contains two side-by-side implementations of the same Teleparty-style 
 
 There is also an experimental frontend spike:
 
-- `apps/teleparty-sveltekit` : SvelteKit local-first product/design spike used to evaluate interaction feel, motion, and route composition outside the main parity track
+- `apps/teleparty-sveltekit` : SvelteKit frontend experiment wired to the existing Convex backend, used to evaluate interaction feel, motion, and route composition outside the main parity track
 
 Both variants support:
 
@@ -91,8 +91,8 @@ Command/process summary:
 - `just spacetime-sync`: publishes the Spacetime module and regenerates typed bindings.
 - `just spacetime-web`: starts the Spacetime web client on port `3002`.
 - `just build-all`: runs production builds for both implementations.
-- `just sveltekit-dev`: starts the experimental SvelteKit spike on port `3003`.
-- `just sveltekit-build`: runs `check` and production build for the experimental SvelteKit spike.
+- `just sveltekit-dev`: starts Convex backend sync and the experimental SvelteKit frontend on port `3003`.
+- `just sveltekit-build`: runs `check` and production build for the experimental SvelteKit frontend with the Convex URL wired in.
 
 ### Convex version
 
@@ -193,7 +193,7 @@ just sveltekit-build
 
 App URL: `http://localhost:3003`
 
-This spike is intentionally local-first. It is for evaluating feel, motion, cursor/stage treatments, and SvelteKit ergonomics without yet adding a third backend implementation to maintain.
+This frontend now talks to the real Convex backend. It is still experimental, but it is no longer a fake local-only mock. The goal is to evaluate whether SvelteKit produces a meaningfully better frontend feel before deciding whether any ideas should migrate into the main apps.
 
 ## Design notes
 

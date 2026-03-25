@@ -115,6 +115,8 @@ just sveltekit-dev
 just sveltekit-build
 ```
 
+`just sveltekit-dev` starts the same Convex backend sync used by `just convex-dev`, then runs the SvelteKit frontend on port `3003` with `PUBLIC_CONVEX_URL` injected from `apps/teleparty-convex/.env.local`.
+
 ---
 
 ## Useful Verification Commands

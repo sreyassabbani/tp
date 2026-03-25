@@ -1,6 +1,7 @@
 <script lang="ts">
 	import StageCursor from '$lib/components/StageCursor.svelte';
 	import { getRelativeCursorPosition } from '$lib/cursor-stage';
+	import { reducedMotion } from '$lib/reduced-motion';
 	import type { CursorViewModel } from '$lib/view-models';
 
 	type StageMode = 'cursor' | 'interact';
@@ -34,17 +35,67 @@
 	}: StagePanelProps = $props();
 
 	let stageSurface: HTMLDivElement | null = null;
+	let stageBounds = $state<DOMRectReadOnly | null>(null);
 
-	function handlePointerMove(event: PointerEvent) {
-		if (!stageSurface || stageIsInteractive) {
+	function syncStageBounds() {
+		if (!stageSurface) {
 			return;
 		}
 
-		const position = getRelativeCursorPosition(stageSurface.getBoundingClientRect(), event);
+		stageBounds = stageSurface.getBoundingClientRect();
+	}
+
+	function handlePointerMove(event: PointerEvent) {
+		if (!stageBounds || stageIsInteractive) {
+			return;
+		}
+
+		const position = getRelativeCursorPosition(stageBounds, event);
 		if (position) {
 			onCursorMove(position);
 		}
 	}
+
+	function handlePointerEnter() {
+		syncStageBounds();
+	}
+
+	$effect(() => {
+		if (!stageSurface) {
+			return;
+		}
+
+		syncStageBounds();
+
+		const resizeObserver = new ResizeObserver(() => {
+			syncStageBounds();
+		});
+
+		let frame = 0;
+		const onScrollOrResize = () => {
+			if (frame !== 0) {
+				return;
+			}
+
+			frame = window.requestAnimationFrame(() => {
+				frame = 0;
+				syncStageBounds();
+			});
+		};
+
+		resizeObserver.observe(stageSurface);
+		window.addEventListener('resize', onScrollOrResize);
+		window.addEventListener('scroll', onScrollOrResize, true);
+
+		return () => {
+			resizeObserver.disconnect();
+			window.removeEventListener('resize', onScrollOrResize);
+			window.removeEventListener('scroll', onScrollOrResize, true);
+			if (frame !== 0) {
+				window.cancelAnimationFrame(frame);
+			}
+		};
+	});
 </script>
 
 <section class="panel stage-panel">
@@ -74,7 +125,7 @@
 
 	<p class="quiet stage-copy">{stageStatusMessage}</p>
 
-	<div bind:this={stageSurface} class="stage-frame">
+		<div bind:this={stageSurface} class="stage-frame">
 		<div class="frame-glow"></div>
 		<iframe
 			allowfullscreen
@@ -86,12 +137,13 @@
 		></iframe>
 
 		{#if !stageIsInteractive}
-			<div
-				aria-hidden="true"
-				class="cursor-layer"
-				onpointerleave={onPointerLeave}
-				onpointermove={handlePointerMove}
-				role="presentation"
+				<div
+					aria-hidden="true"
+					class="cursor-layer"
+					onpointerenter={handlePointerEnter}
+					onpointerleave={onPointerLeave}
+					onpointermove={handlePointerMove}
+					role="presentation"
 			></div>
 		{/if}
 
@@ -110,6 +162,7 @@
 <style>
 	.stage-panel {
 		padding: 1.25rem;
+		container-type: inline-size;
 	}
 
 	.stage-header {
@@ -162,7 +215,7 @@
 		position: relative;
 		overflow: hidden;
 		margin-top: 1rem;
-		min-height: 27rem;
+		min-height: clamp(18rem, 58svh, 27rem);
 		border-radius: 2rem;
 		border: 1px solid color-mix(in oklch, var(--signal) 24%, white 76%);
 		background:
@@ -203,5 +256,11 @@
 		inset: 0.7rem;
 		border-radius: 1.45rem;
 		cursor: none;
+	}
+
+	@container (max-width: 34rem) {
+		.stage-frame {
+			min-height: clamp(14rem, 44svh, 19rem);
+		}
 	}
 </style>

@@ -119,7 +119,7 @@
 		</p>
 	</div>
 
-	<div class="policy-card">
+		<div class="policy-card">
 		<div class="policy-header">
 			<div>
 				<p class="control-title">Manual soundboard mode</p>
@@ -157,7 +157,7 @@
 			</div>
 		{/if}
 
-		<div class="policy-card subtle-card">
+			<div class="policy-card subtle-card">
 			<div class="policy-header">
 				<div>
 					<p class="control-title">Guest video controls</p>
@@ -279,10 +279,10 @@
 		display: grid;
 		gap: 1rem;
 		margin-top: 1rem;
-		border: 1px solid var(--line-soft);
-		border-radius: 1.7rem;
-		background: var(--surface-tint);
-		padding: 1rem;
+		border-top: 1px solid var(--panel-rule);
+		border-radius: 0;
+		background: transparent;
+		padding: 1rem 0 0;
 	}
 
 	.policy-header {
@@ -302,6 +302,7 @@
 
 	.subtle-card {
 		margin-top: 0;
+		padding-top: 1rem;
 	}
 
 	.participant-policy {
@@ -323,7 +324,7 @@
 		justify-content: space-between;
 		border: 1px solid var(--line-soft);
 		border-radius: 1.15rem;
-		background: var(--surface-strong);
+		background: var(--surface-muted);
 		padding: 0.9rem;
 	}
 

@@ -12,7 +12,7 @@
 
 <section class="room-heading">
 	<div class="heading-copy">
-		<p class="eyebrow">SvelteKit frontend · Convex room</p>
+		<p class="eyebrow">Live Screening Room</p>
 		<h1>Room {room.roomCode}</h1>
 		<p class="quiet">
 			Owner: {room.createdByDisplayName} · {onlineParticipantCount} active participant{onlineParticipantCount === 1

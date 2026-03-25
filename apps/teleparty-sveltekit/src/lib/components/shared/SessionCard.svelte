@@ -5,6 +5,7 @@
 		eyebrow?: string;
 		profile: SessionProfile;
 		subtitle?: string;
+		truncateSecrets?: boolean;
 		title: string;
 		updateDisplayName: (value: string) => void;
 	};
@@ -13,6 +14,7 @@
 		eyebrow = 'Presence',
 		profile,
 		subtitle = '',
+		truncateSecrets = true,
 		title,
 		updateDisplayName
 	}: SessionCardProps = $props();
@@ -44,7 +46,9 @@
 		</div>
 		<div>
 			<dt>Owner key</dt>
-			<dd><code>{profile.sessionSecret}</code></dd>
+			<dd>
+				<code>{truncateSecrets ? `${profile.sessionSecret.slice(0, 12)}...` : profile.sessionSecret}</code>
+			</dd>
 		</div>
 		<div>
 			<dt>Cursor tint</dt>

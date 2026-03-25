@@ -109,14 +109,14 @@
 </script>
 
 <svelte:head>
-	<title>Teleparty Studio / SvelteKit + Convex</title>
+	<title>Teleparty Studio</title>
 	<meta
 		name="description"
-		content="A SvelteKit frontend for the Teleparty Clone Lab, wired to the live Convex backend."
+		content="Start a shared screening room from any watch link and tune the room controls as the crowd changes."
 	/>
 </svelte:head>
 
-<div class="shell">
+<main class="shell">
 	<LobbyHero
 		onPresetSelect={(nextUrl) => {
 			watchUrl = nextUrl;
@@ -137,7 +137,7 @@
 			<SessionCard
 				eyebrow="Presence"
 				profile={$sessionProfile}
-				subtitle="Reusable identity state lives at layout level now, not inside each route."
+				subtitle="Your room identity moves with you so you can host, join, and adjust the session without reintroducing yourself."
 				title="Your Session"
 				updateDisplayName={updateDisplayName}
 			/>
@@ -150,7 +150,7 @@
 			/>
 		</aside>
 	</section>
-</div>
+</main>
 
 <style>
 	.dashboard {

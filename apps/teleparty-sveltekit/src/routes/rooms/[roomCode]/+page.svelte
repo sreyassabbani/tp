@@ -423,7 +423,7 @@
 </script>
 
 <svelte:head>
-	<title>{roomCode ? `Room ${roomCode} / SvelteKit + Convex` : 'Room / SvelteKit + Convex'}</title>
+	<title>{roomCode ? `Room ${roomCode} / Teleparty Studio` : 'Room / Teleparty Studio'}</title>
 </svelte:head>
 
 {#if !roomCode}
@@ -455,7 +455,7 @@
 {:else if roomLookup?.kind === 'forbidden'}
 	<PrivateRoomGate {roomCode} onJoin={onPrivateJoin} />
 {:else if room}
-	<div class="shell room-shell">
+	<main class="shell room-shell">
 		<RoomHeading {onlineParticipantCount} {room} {soundboardEnabled} />
 
 		<section class="room-grid">
@@ -484,7 +484,7 @@
 				<SessionCard
 					eyebrow="Presence"
 					profile={$sessionProfile}
-					subtitle="Shared identity stays live while presence heartbeats and participant profile sync run in the background."
+					subtitle="This identity stays with you through the room so the stage, soundboard, and participant list all agree on who you are."
 					title="Your session"
 					updateDisplayName={updateDisplayName}
 				/>
@@ -504,7 +504,7 @@
 				{/if}
 			</div>
 		</section>
-	</div>
+	</main>
 {/if}
 
 <style>

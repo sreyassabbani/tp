@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { SoundboardPolicy, Visibility } from '$lib/teleparty-domain';
 	import { fade } from 'svelte/transition';
+	import { reducedMotion } from '$lib/reduced-motion';
 
 	type CreateRoomDraft = {
 		soundboardPolicy: SoundboardPolicy;
@@ -49,6 +50,9 @@
 		maxParticipants: 8
 	});
 	let visibilityDraft = $state<VisibilityDraft>({ kind: 'public' });
+	const feedbackId = 'create-room-feedback';
+	const watchUrlId = 'create-room-watch-url';
+	const accessCodeId = 'create-room-access-code';
 
 	let soundboardPolicy = $derived.by<SoundboardPolicy>(() =>
 		soundboardDraft.kind === 'manual'
@@ -120,9 +124,11 @@
 		event.preventDefault();
 		void handleSubmit();
 	}
+
+	let fadeTransition = $derived($reducedMotion ? { duration: 0 } : { duration: 180 });
 </script>
 
-<form class="panel creation-panel" onsubmit={handleFormSubmit}>
+<form aria-describedby={error ? feedbackId : undefined} class="panel creation-panel" onsubmit={handleFormSubmit}>
 	<div class="panel-header">
 		<p class="eyebrow">Studio</p>
 		<h2 class="panel-title">Create Room</h2>
@@ -135,9 +141,13 @@
 	<label class="field">
 		<span class="field-label">Watch link</span>
 		<input
+			id={watchUrlId}
+			aria-describedby={error ? feedbackId : undefined}
+			aria-invalid={error ? 'true' : undefined}
 			bind:value={watchUrl}
 			class="field-input"
 			placeholder="https://www.youtube.com/watch?v=..."
+			required
 			type="url"
 		/>
 	</label>
@@ -158,13 +168,17 @@
 	</div>
 
 	{#if visibilityDraft.kind === 'private'}
-		<label class="field" transition:fade={{ duration: 180 }}>
+		<label class="field" transition:fade={fadeTransition}>
 			<span class="field-label">Access code</span>
 			<input
+				id={accessCodeId}
+				aria-describedby={error ? feedbackId : undefined}
+				aria-invalid={error ? 'true' : undefined}
 				bind:value={visibilityDraft.accessCode}
 				class="field-input"
 				maxlength="16"
 				placeholder="midnight-cut"
+				required={visibilityDraft.kind === 'private'}
 				type="text"
 			/>
 		</label>
@@ -187,7 +201,7 @@
 		</div>
 
 		{#if soundboardDraft.kind === 'manual'}
-			<div class="manual-controls" transition:fade={{ duration: 180 }}>
+			<div class="manual-controls" transition:fade={fadeTransition}>
 				<label class="checkline">
 					<input
 						bind:checked={soundboardDraft.enabled}
@@ -211,7 +225,9 @@
 	</div>
 
 	{#if error}
-		<p class="error-banner" transition:fade>{error}</p>
+		<p aria-live="polite" class="error-banner" id={feedbackId} role="alert" transition:fade={fadeTransition}>
+			{error}
+		</p>
 	{/if}
 
 	<button class="button-primary submit-button" disabled={isSubmitting} type="submit">
@@ -228,10 +244,10 @@
 
 	.switch-card,
 	.policy-card {
-		border: 1px solid var(--line-soft);
-		border-radius: 1.7rem;
-		background: var(--surface-tint);
-		padding: 1rem;
+		border-top: 1px solid var(--panel-rule);
+		border-radius: 0;
+		background: transparent;
+		padding: 1rem 0 0;
 	}
 
 	.switch-card,

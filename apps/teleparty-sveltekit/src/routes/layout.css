@@ -18,14 +18,30 @@
 	--surface-strong: color-mix(in oklch, white 84%, var(--paper-shadow) 16%);
 	--surface-soft: color-mix(in oklch, white 92%, var(--paper-shadow) 8%);
 	--surface-tint: color-mix(in oklch, white 68%, var(--signal-wash) 32%);
+	--surface-muted: color-mix(in oklch, white 74%, var(--paper) 26%);
 	--ring-soft: color-mix(in oklch, var(--signal-wash) 36%, transparent 64%);
+	--focus-ring:
+		0 0 0 3px color-mix(in oklch, white 50%, transparent 50%),
+		0 0 0 6px color-mix(in oklch, var(--signal-wash) 45%, transparent 55%);
+	--panel-fill: linear-gradient(
+		180deg,
+		color-mix(in oklch, white 90%, var(--paper) 10%),
+		color-mix(in oklch, white 84%, var(--paper-shadow) 16%)
+	);
+	--panel-rule: color-mix(in oklch, var(--ink) 10%, white 90%);
+	--panel-blur: blur(10px);
 	--shadow-panel:
-		0 30px 60px rgba(78, 56, 28, 0.12),
-		inset 0 1px 0 rgba(255, 255, 255, 0.82);
+		0 18px 38px rgba(78, 56, 28, 0.09),
+		inset 0 1px 0 rgba(255, 255, 255, 0.78);
 	--shadow-lift: 0 16px 36px rgba(59, 37, 18, 0.18);
 	--shadow-stage:
 		inset 0 1px 0 rgba(255, 255, 255, 0.16),
 		0 28px 60px rgba(56, 35, 18, 0.28);
+	--cursor-shell-shadow:
+		0 14px 28px rgba(38, 26, 18, 0.18),
+		0 2px 0 rgba(255, 255, 255, 0.5) inset;
+	--cursor-highlight-fill: color-mix(in oklch, white 88%, transparent 12%);
+	--cursor-highlight-stroke: color-mix(in oklch, white 70%, transparent 30%);
 	--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
@@ -65,6 +81,10 @@ body::before {
 	mix-blend-mode: multiply;
 }
 
+main {
+	display: block;
+}
+
 ::selection {
 	background: color-mix(in oklch, var(--signal-wash) 72%, transparent 28%);
 	color: var(--ink);
@@ -97,10 +117,9 @@ button {
 	position: relative;
 	border: 1px solid var(--line-soft);
 	border-radius: 2rem;
-	background:
-		linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 241, 230, 0.92));
+	background: var(--panel-fill);
 	box-shadow: var(--shadow-panel);
-	backdrop-filter: blur(18px);
+	backdrop-filter: var(--panel-blur);
 }
 
 .eyebrow {
@@ -160,6 +179,11 @@ button {
 	border-color: color-mix(in oklch, var(--signal) 44%, white 56%);
 	box-shadow: 0 0 0 4px var(--ring-soft);
 	transform: translateY(-1px);
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
 }
 
 .pill {
@@ -262,6 +286,10 @@ button {
 .switch {
 	position: relative;
 	display: inline-flex;
+	min-height: 44px;
+	min-width: 44px;
+	align-items: center;
+	justify-content: center;
 	flex: none;
 }
 
@@ -273,8 +301,8 @@ button {
 
 .switch-track {
 	display: inline-flex;
-	height: 2rem;
-	width: 3.6rem;
+	height: 2.15rem;
+	width: 3.85rem;
 	align-items: center;
 	border-radius: 999px;
 	background: color-mix(in oklch, var(--ink) 22%, white 78%);
@@ -304,6 +332,10 @@ button {
 	opacity: 0.5;
 }
 
+.switch input:focus-visible + .switch-track {
+	box-shadow: var(--focus-ring);
+}
+
 .empty-state {
 	border: 1px dashed var(--line-soft);
 	border-radius: 1.6rem;
@@ -315,4 +347,15 @@ button {
 	font-family: var(--font-display);
 	font-size: 1.4rem;
 	letter-spacing: -0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
 }

@@ -10,7 +10,7 @@
 	let { actionLabel, body, eyebrow, onAction, title }: RoomStatePanelProps = $props();
 </script>
 
-<div class="shell room-shell">
+<main class="shell room-shell">
 	<section class="panel state-panel">
 		<p class="eyebrow">{eyebrow}</p>
 		<h1>{title}</h1>
@@ -21,7 +21,7 @@
 			</button>
 		{/if}
 	</section>
-</div>
+</main>
 
 <style>
 	.room-shell {

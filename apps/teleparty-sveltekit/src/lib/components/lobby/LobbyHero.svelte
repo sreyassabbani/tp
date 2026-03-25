@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { quintOut } from 'svelte/easing';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { reducedMotion } from '$lib/reduced-motion';
 
 	type CinematicPreset = {
 		label: string;
@@ -13,22 +14,30 @@
 	};
 
 	let { onPresetSelect, presets }: LobbyHeroProps = $props();
+	let flyTransition = $derived(
+		$reducedMotion ? { y: 0, duration: 0 } : { y: 36, duration: 650, easing: quintOut }
+	);
+	let fadeTransition = $derived($reducedMotion ? { duration: 0 } : { delay: 180, duration: 600 });
+	let scaleTransition = $derived(
+		$reducedMotion
+			? { duration: 0, start: 1 }
+			: { duration: 420, easing: quintOut, start: 0.92 }
+	);
 </script>
 
 <section class="hero">
-	<div class="hero-copy" in:fly={{ y: 36, duration: 650, easing: quintOut }}>
-		<p class="eyebrow">SvelteKit Frontend · Convex Backend</p>
-		<h1 class="hero-title">Build a screening room from any link.</h1>
+	<div class="hero-copy" in:fly={flyTransition}>
+		<p class="eyebrow">Live Screening Desk</p>
+		<h1 class="hero-title">Start a room from any watch link.</h1>
 		<p class="hero-body">
-			This branch should feel like a deliberate product surface, not a framework demo.
-			Everything here is tuned for live room hosting: clear cadence, warm materials, and
-			realtime state that still reads like a designed interface.
+			Set up a shared room, tune the crowd controls, and move between cinematic viewing
+			and live cursor mode without the interface collapsing into admin chrome.
 		</p>
 		<div class="preset-strip">
 			{#each presets as preset, index (preset.label)}
 				<button
 					class="button-chip"
-					in:scale={{ delay: 120 + index * 70, duration: 420, easing: quintOut, start: 0.92 }}
+					in:scale={{ ...scaleTransition, delay: $reducedMotion ? 0 : 120 + index * 70 }}
 					onclick={() => onPresetSelect(preset.url)}
 					type="button"
 				>
@@ -38,20 +47,20 @@
 		</div>
 	</div>
 
-	<aside class="hero-ledger panel" in:fade={{ delay: 180, duration: 600 }}>
-		<p class="ledger-title">Cut notes</p>
+	<aside class="hero-ledger" in:fade={fadeTransition}>
+		<p class="ledger-title">How It Runs</p>
 		<div class="ledger-grid">
 			<div>
-				<strong>Realtime room model</strong>
-				<p>Lobby counts, room joins, cursors, and soundboard traffic all come from Convex.</p>
+				<strong>Room-first flow</strong>
+				<p>Start with the link, set the room rules, then let the rest of the controls fall in behind it.</p>
 			</div>
 			<div>
-				<strong>Svelte 5 shape</strong>
-				<p>Runes, `$app/state`, and extracted panels replace the legacy one-file route pass.</p>
+				<strong>Shared presence</strong>
+				<p>Participants, cursors, and sound cues stay live without turning the surface into a debug console.</p>
 			</div>
 			<div>
-				<strong>Editorial bias</strong>
-				<p>Warm paper outside, stage contrast inside, and a control-desk rhythm instead of generic cards.</p>
+				<strong>Owner controls</strong>
+				<p>When the room gets noisy, the host can tighten soundboard and stage access without leaving the session.</p>
 			</div>
 		</div>
 	</aside>
@@ -94,7 +103,8 @@
 
 	.hero-ledger {
 		align-self: end;
-		padding: 1.3rem;
+		padding: 0.35rem 0 0 1.2rem;
+		border-left: 1px solid var(--panel-rule);
 	}
 
 	.ledger-title {
@@ -132,6 +142,14 @@
 		.hero {
 			grid-template-columns: minmax(0, 1.25fr) minmax(20rem, 0.75fr);
 			align-items: end;
+		}
+	}
+
+	@media (max-width: 859px) {
+		.hero-ledger {
+			padding: 1.15rem 0 0;
+			border-left: 0;
+			border-top: 1px solid var(--panel-rule);
 		}
 	}
 </style>

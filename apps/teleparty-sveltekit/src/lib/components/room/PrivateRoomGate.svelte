@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
+	import { reducedMotion } from '$lib/reduced-motion';
 
 	type PrivateRoomGateProps = {
 		onJoin: (accessCode: string) => void;
@@ -10,6 +11,7 @@
 
 	let accessCode = $state('');
 	let hasAttemptedJoin = $state(false);
+	const feedbackId = 'private-room-gate-feedback';
 
 	function handleSubmit() {
 		hasAttemptedJoin = true;
@@ -20,31 +22,38 @@
 		event.preventDefault();
 		handleSubmit();
 	}
+
+	let fadeTransition = $derived($reducedMotion ? { duration: 0 } : { duration: 220 });
 </script>
 
-<div class="shell room-shell">
-	<section class="panel private-panel" in:fade={{ duration: 220 }}>
+<main class="shell room-shell">
+	<section aria-describedby={hasAttemptedJoin ? feedbackId : undefined} class="panel private-panel" in:fade={fadeTransition}>
 		<p class="eyebrow">Private room</p>
 		<h1>Enter the access code for room {roomCode}.</h1>
-		<p class="quiet">Convex checks the gate server-side before the room subscription opens.</p>
+		<p class="quiet">Use the host’s access phrase to open the room.</p>
 		<form class="private-form" onsubmit={handleFormSubmit}>
 			<label class="field">
 				<span class="field-label">Access code</span>
 				<input
+					aria-describedby={hasAttemptedJoin ? feedbackId : undefined}
+					aria-invalid={hasAttemptedJoin ? 'true' : undefined}
 					bind:value={accessCode}
 					class="field-input"
 					maxlength="16"
 					placeholder="midnight-cut"
+					required
 					type="text"
 				/>
 			</label>
 			{#if hasAttemptedJoin}
-				<p class="error-banner">That access code does not match this room.</p>
+				<p aria-live="polite" class="error-banner" id={feedbackId} role="alert">
+					That access phrase does not match this room.
+				</p>
 			{/if}
 			<button class="button-primary join-button" type="submit">Join Room</button>
 		</form>
 	</section>
-</div>
+</main>
 
 <style>
 	.room-shell {

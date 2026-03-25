@@ -10,15 +10,14 @@
 	};
 
 	let { error, events, onTrigger, soundboardEnabled }: SoundboardPanelProps = $props();
+	const soundLabels = new Map(sounds.map((sound) => [sound.id, sound.label]));
 </script>
 
 <section class="panel soundboard-panel">
 	<div class="panel-header">
 		<p class="eyebrow">Dock</p>
 		<h2 class="panel-title">Soundboard</h2>
-		<p class="quiet">
-			Live shared stings, still paced like a control surface instead of a toy tray.
-		</p>
+		<p class="quiet">Short cues the room can hear together when the host allows it.</p>
 	</div>
 
 	<div class="sound-grid">
@@ -43,9 +42,9 @@
 		{#if events.length === 0}
 			<p class="quiet">Still quiet. Hit a sting and the ledger updates.</p>
 		{:else}
-			<div class="log-stack">
+			<div aria-live="polite" class="log-stack">
 				{#each events.slice(-6) as event (event.eventId)}
-					<p>{event.actorDisplayName} played {event.soundId}</p>
+					<p>{event.actorDisplayName} played {soundLabels.get(event.soundId) ?? 'a cue'}</p>
 				{/each}
 			</div>
 		{/if}

@@ -2,6 +2,7 @@
 	import type { PublicRoomSummary } from '$lib/view-models';
 	import { quintOut } from 'svelte/easing';
 	import { fly } from 'svelte/transition';
+	import { reducedMotion } from '$lib/reduced-motion';
 
 	type PublicRoomsPanelProps = {
 		error: string | null;
@@ -11,16 +12,17 @@
 	};
 
 	let { error, isLoading, onOpenRoom, rooms }: PublicRoomsPanelProps = $props();
+	let flyTransition = $derived(
+		$reducedMotion ? { x: 0, duration: 0 } : { x: 18, duration: 420, easing: quintOut }
+	);
 </script>
 
 <section class="panel rooms-panel">
-	<div class="panel-header">
-		<p class="eyebrow">Lobby</p>
-		<h2 class="panel-title">Public Rooms</h2>
-		<p class="quiet">
-			Live Convex rows, shaped like a room ledger instead of a generic table.
-		</p>
-	</div>
+		<div class="panel-header">
+			<p class="eyebrow">Lobby</p>
+			<h2 class="panel-title">Public Rooms</h2>
+			<p class="quiet">Fresh rooms you can step into right now.</p>
+		</div>
 
 	{#if error}
 		<p class="error-banner panel-error">{error}</p>
@@ -34,12 +36,12 @@
 	{:else}
 		<div class="room-ledger">
 			{#each rooms as room, index (room.roomCode)}
-				<button
-					class="room-entry"
-					in:fly={{ x: 18, delay: 120 + index * 60, duration: 420, easing: quintOut }}
-					onclick={() => onOpenRoom(room.roomCode)}
-					type="button"
-				>
+					<button
+						class="room-entry"
+						in:fly={{ ...flyTransition, delay: $reducedMotion ? 0 : 120 + index * 60 }}
+						onclick={() => onOpenRoom(room.roomCode)}
+						type="button"
+					>
 					<span class="room-host">{room.watchHost}</span>
 					<strong>Room {room.roomCode}</strong>
 					<span class="quiet">
@@ -73,7 +75,7 @@
 		align-items: start;
 		border: 1px solid var(--line-soft);
 		border-radius: 1.4rem;
-		background: var(--surface-strong);
+		background: var(--surface-muted);
 		padding: 1rem;
 		text-align: left;
 	}

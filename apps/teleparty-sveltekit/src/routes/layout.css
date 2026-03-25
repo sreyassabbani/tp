@@ -130,6 +130,7 @@ button {
 .panel-header {
 	display: grid;
 	gap: 0.35rem;
+	min-width: 0;
 }
 
 .eyebrow {
@@ -147,12 +148,15 @@ button {
 	font-size: clamp(1.55rem, 2.3vw, 2.1rem);
 	line-height: 1;
 	letter-spacing: -0.045em;
+	overflow-wrap: anywhere;
 }
 
 .quiet {
 	margin: 0;
 	color: var(--ink-soft);
 	line-height: 1.58;
+	overflow-wrap: anywhere;
+	hyphens: auto;
 }
 
 .field {
@@ -476,6 +480,7 @@ button {
 .hero-note {
 	display: grid;
 	gap: 0.2rem;
+	min-width: 0;
 }
 
 .hero-note strong {
@@ -652,6 +657,7 @@ button {
 	letter-spacing: 0.11em;
 	text-transform: uppercase;
 	color: var(--signal);
+	overflow-wrap: anywhere;
 }
 
 .room-entry-title {
@@ -667,6 +673,7 @@ button {
 	font-size: 0.97rem;
 	font-weight: 700;
 	letter-spacing: -0.02em;
+	overflow-wrap: anywhere;
 }
 
 .session-ledger {
@@ -723,6 +730,7 @@ button {
 .room-hero-copy {
 	display: grid;
 	gap: 0.45rem;
+	min-width: 0;
 }
 
 .room-hero-title {
@@ -731,6 +739,7 @@ button {
 	font-size: clamp(2.7rem, 7vw, 4.8rem);
 	line-height: 0.95;
 	letter-spacing: -0.05em;
+	overflow-wrap: anywhere;
 }
 
 .room-hero-meta,
@@ -973,6 +982,7 @@ button {
 	font-size: clamp(2.4rem, 7vw, 4.3rem);
 	line-height: 0.96;
 	letter-spacing: -0.05em;
+	overflow-wrap: anywhere;
 }
 
 .state-action {

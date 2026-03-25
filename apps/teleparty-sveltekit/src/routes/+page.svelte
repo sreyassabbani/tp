@@ -116,7 +116,7 @@
 	/>
 </svelte:head>
 
-<main class="shell">
+<main class="shell lobby-main">
 	<LobbyHero
 		onPresetSelect={(nextUrl) => {
 			watchUrl = nextUrl;
@@ -124,7 +124,7 @@
 		presets={cinematicPresets}
 	/>
 
-	<section class="dashboard">
+	<section class="lobby-grid">
 		<CreateRoomPanel
 			{autoCapacity}
 			{error}
@@ -133,11 +133,11 @@
 			onCreate={createRoom}
 		/>
 
-		<aside class="stack">
+		<aside class="lobby-rail">
 			<SessionCard
 				eyebrow="Presence"
 				profile={$sessionProfile}
-				subtitle="Your room identity moves with you so you can host, join, and adjust the session without reintroducing yourself."
+				subtitle="Your room identity moves with you so you can host, join, and cue the room without reintroducing yourself."
 				title="Your Session"
 				updateDisplayName={updateDisplayName}
 			/>
@@ -151,22 +151,3 @@
 		</aside>
 	</section>
 </main>
-
-<style>
-	.dashboard {
-		display: grid;
-		gap: 1.4rem;
-	}
-
-	.stack {
-		display: grid;
-		gap: 1.4rem;
-	}
-
-	@media (min-width: 860px) {
-		.dashboard {
-			grid-template-columns: minmax(0, 1.18fr) minmax(19rem, 0.82fr);
-			align-items: start;
-		}
-	}
-</style>

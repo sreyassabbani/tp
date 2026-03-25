@@ -33,84 +33,31 @@
 		<span class="field-label">Display name</span>
 		<input
 			class="field-input"
+			maxlength="40"
 			oninput={(event) => updateDisplayName((event.currentTarget as HTMLInputElement).value)}
+			placeholder="Your room name"
 			type="text"
 			value={profile.displayName}
 		/>
 	</label>
 
 	<dl class="session-ledger">
-		<div>
+		<div class="session-item">
 			<dt>Session</dt>
-			<dd><code>{profile.sessionId}</code></dd>
+			<dd><code class="session-code">{profile.sessionId}</code></dd>
 		</div>
-		<div>
-			<dt>Owner key</dt>
+		<div class="session-item">
+			<dt>Host key</dt>
 			<dd>
-				<code>{truncateSecrets ? `${profile.sessionSecret.slice(0, 12)}...` : profile.sessionSecret}</code>
+				<code class="session-code">{truncateSecrets ? `${profile.sessionSecret.slice(0, 12)}...` : profile.sessionSecret}</code>
 			</dd>
 		</div>
-		<div>
+		<div class="session-item">
 			<dt>Cursor tint</dt>
 			<dd class="swatch-row">
 				<span class="swatch-dot" style={`--session-color:${profile.color};`}></span>
-				<strong>{profile.color}</strong>
+				<span class="session-label">{profile.color}</span>
 			</dd>
 		</div>
 	</dl>
 </section>
-
-<style>
-	.session-card {
-		padding: 1.35rem;
-	}
-
-	.session-field {
-		margin-top: 1rem;
-	}
-
-	.session-ledger {
-		display: grid;
-		gap: 0.82rem;
-		margin: 1rem 0 0;
-		padding-top: 1rem;
-		border-top: 1px solid var(--line-soft);
-	}
-
-	.session-ledger div {
-		display: grid;
-		gap: 0.22rem;
-	}
-
-	dt {
-		font-size: 0.74rem;
-		font-weight: 800;
-		letter-spacing: 0.11em;
-		text-transform: uppercase;
-		color: var(--ink-soft);
-	}
-
-	dd {
-		margin: 0;
-	}
-
-	code {
-		overflow-wrap: anywhere;
-		font-size: 0.78rem;
-	}
-
-	.swatch-row {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.55rem;
-	}
-
-	.swatch-dot {
-		display: inline-flex;
-		height: 0.85rem;
-		width: 0.85rem;
-		border-radius: 999px;
-		background: var(--session-color);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.74);
-	}
-</style>

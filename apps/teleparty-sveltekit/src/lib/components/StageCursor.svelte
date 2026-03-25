@@ -14,30 +14,21 @@
 	<div class:solo={isSelf} class="cursor-chip" style={`--cursor-color: ${color};`}>
 		<span class="cursor-glyph" aria-hidden="true">
 			<svg viewBox="0 0 28 28" fill="none">
-				<defs>
-					<mask id="rounded-pointer-mask">
-						<rect width="28" height="28" fill="black"></rect>
-						<path
-							d="M10.2 4.2C11.5 3.5 13.1 3.6 14.3 4.5L21.1 10C22.4 11 22.8 12.7 22.2 14.2L17.8 23C17 24.6 15.1 25.4 13.5 24.8L6.4 21.8C4.7 21.1 3.7 19.3 3.9 17.5L5.1 8.7C5.3 7.1 6.2 5.7 7.5 5L10.2 4.2Z"
-							fill="white"
-						></path>
-						<circle cx="10.4" cy="15.6" r="3.2" fill="black"></circle>
-					</mask>
-				</defs>
 				<path
-					d="M10.2 4.2C11.5 3.5 13.1 3.6 14.3 4.5L21.1 10C22.4 11 22.8 12.7 22.2 14.2L17.8 23C17 24.6 15.1 25.4 13.5 24.8L6.4 21.8C4.7 21.1 3.7 19.3 3.9 17.5L5.1 8.7C5.3 7.1 6.2 5.7 7.5 5L10.2 4.2Z"
+					d="M5.2 4.4C4.5 4.1 3.9 4.7 4.1 5.4L8.1 22.2C8.4 23.5 10 23.9 10.9 23L14.2 19.7C14.6 19.3 15.2 19.3 15.6 19.7L18.8 22.9C19.6 23.7 20.9 23.7 21.7 22.9C22.5 22.1 22.5 20.8 21.7 20L18.4 16.8C18 16.4 18 15.8 18.4 15.4L21.6 12.2C22.5 11.3 22.1 9.8 20.8 9.5L5.2 4.4Z"
 					fill={color}
-					mask="url(#rounded-pointer-mask)"
 					stroke="var(--cursor-highlight-fill)"
 					stroke-linecap="round"
 					stroke-linejoin="round"
 					stroke-width="1.2"
 				></path>
 				<path
-					d="M14.2 8.4C15.3 7.9 16.6 8.3 17.2 9.2C17.8 10.2 17.5 11.5 16.5 12.2C15.4 12.9 14 12.6 13.3 11.6C12.6 10.4 12.9 9 14.2 8.4Z"
+					d="M10.7 7.8C10.2 7.5 9.7 7.9 9.8 8.5L11.8 16.2C11.9 16.8 12.7 16.9 13 16.5L14.6 14.6C14.9 14.3 15.3 14.3 15.6 14.6L17.2 16.2"
 					fill="color-mix(in oklch, white 30%, transparent 70%)"
 					stroke="var(--cursor-highlight-stroke)"
-					stroke-width="0.75"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="1"
 				></path>
 			</svg>
 		</span>
@@ -58,18 +49,17 @@
 	.cursor-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.38rem;
 		border-radius: 999px;
-		border: 1px solid color-mix(in oklch, white 64%, var(--cursor-color) 36%);
+		border: 1px solid color-mix(in oklch, white 72%, var(--cursor-color) 28%);
 		background:
-			linear-gradient(135deg, color-mix(in oklch, white 92%, var(--cursor-color) 8%), color-mix(in oklch, white 82%, var(--cursor-color) 18%));
-		padding: 0.28rem 0.7rem 0.28rem 0.38rem;
+			linear-gradient(135deg, color-mix(in oklch, white 94%, var(--cursor-color) 6%), color-mix(in oklch, white 86%, var(--cursor-color) 14%));
+		padding: 0.22rem 0.58rem 0.22rem 0.3rem;
 		box-shadow: var(--cursor-shell-shadow);
 		color: oklch(22% 0.03 34);
-		font-size: 0.72rem;
+		font-size: 0.69rem;
 		font-weight: 700;
 		letter-spacing: 0.02em;
-		backdrop-filter: blur(12px);
 	}
 
 	.cursor-chip.solo {
@@ -78,8 +68,8 @@
 
 	.cursor-glyph {
 		display: inline-flex;
-		height: 1rem;
-		width: 1rem;
+		height: 0.92rem;
+		width: 0.92rem;
 		flex: none;
 	}
 
@@ -91,7 +81,7 @@
 	}
 
 	.cursor-name {
-		max-width: 12ch;
+		max-width: 11ch;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

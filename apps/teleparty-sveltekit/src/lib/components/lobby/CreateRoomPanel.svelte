@@ -133,93 +133,104 @@
 		<p class="eyebrow">Studio</p>
 		<h2 class="panel-title">Create Room</h2>
 		<p class="quiet">
-			Parse-first room setup with explicit privacy and owner policy, aimed at a live room
-			that still feels composed.
+			Start with the watch link, then decide how open the room should feel before anyone
+			else arrives.
 		</p>
 	</div>
 
-	<label class="field">
-		<span class="field-label">Watch link</span>
-		<input
-			id={watchUrlId}
-			aria-describedby={error ? feedbackId : undefined}
-			aria-invalid={error ? 'true' : undefined}
-			bind:value={watchUrl}
-			class="field-input"
-			placeholder="https://www.youtube.com/watch?v=..."
-			required
-			type="url"
-		/>
-	</label>
-
-	<div class="switch-card">
-		<div>
-			<p class="control-title">Private room</p>
-			<p class="quiet">Gate the room with an access code when the screening should stay closed.</p>
-		</div>
-		<label class="switch">
-			<input
-				checked={visibilityDraft.kind === 'private'}
-				onchange={(event) => setPrivateRoom((event.currentTarget as HTMLInputElement).checked)}
-				type="checkbox"
-			/>
-			<span class="switch-track"></span>
-		</label>
-	</div>
-
-	{#if visibilityDraft.kind === 'private'}
-		<label class="field" transition:fade={fadeTransition}>
-			<span class="field-label">Access code</span>
-			<input
-				id={accessCodeId}
-				aria-describedby={error ? feedbackId : undefined}
-				aria-invalid={error ? 'true' : undefined}
-				bind:value={visibilityDraft.accessCode}
-				class="field-input"
-				maxlength="16"
-				placeholder="midnight-cut"
-				required={visibilityDraft.kind === 'private'}
-				type="text"
-			/>
-		</label>
-	{/if}
-
-	<div class="policy-card">
-		<div class="policy-header">
-			<div>
-				<p class="control-title">Owner-controlled soundboard</p>
-				<p class="quiet">Manual mode lets you gate room chaos with an explicit crowd ceiling.</p>
-			</div>
-			<label class="switch">
+	<div class="control-stack">
+		<div class="control-block tint">
+			<label class="field">
+				<span class="field-label">Watch link</span>
 				<input
-					checked={soundboardDraft.kind === 'manual'}
-					onchange={(event) => setManualMode((event.currentTarget as HTMLInputElement).checked)}
-					type="checkbox"
+					id={watchUrlId}
+					aria-describedby={error ? feedbackId : undefined}
+					aria-invalid={error ? 'true' : undefined}
+					bind:value={watchUrl}
+					class="field-input"
+					inputmode="url"
+					placeholder="https://www.youtube.com/watch?v=..."
+					required
+					type="url"
 				/>
-				<span class="switch-track"></span>
 			</label>
 		</div>
 
-		{#if soundboardDraft.kind === 'manual'}
-			<div class="manual-controls" transition:fade={fadeTransition}>
-				<label class="checkline">
+		<div class="control-block">
+			<div class="toggle-row">
+				<div class="toggle-copy">
+					<p class="control-title">Private room</p>
+					<p class="quiet">Require an access phrase when the screening should stay closed.</p>
+				</div>
+				<label class="switch">
 					<input
-						bind:checked={soundboardDraft.enabled}
+						checked={visibilityDraft.kind === 'private'}
+						onchange={(event) => setPrivateRoom((event.currentTarget as HTMLInputElement).checked)}
 						type="checkbox"
 					/>
-					<span>Enable soundboard</span>
-				</label>
-
-				<label class="slider-line">
-					<span>Max participants</span>
-					<strong>{soundboardDraft.maxParticipants}</strong>
-					<input bind:value={soundboardDraft.maxParticipants} max="24" min="2" type="range" />
+					<span class="switch-track"></span>
 				</label>
 			</div>
-		{/if}
+
+			{#if visibilityDraft.kind === 'private'}
+				<label class="field" transition:fade={fadeTransition}>
+					<span class="field-label">Access code</span>
+					<input
+						id={accessCodeId}
+						aria-describedby={error ? feedbackId : undefined}
+						aria-invalid={error ? 'true' : undefined}
+						autocomplete="off"
+						bind:value={visibilityDraft.accessCode}
+						class="field-input"
+						maxlength="16"
+						placeholder="midnight-cut"
+						required={visibilityDraft.kind === 'private'}
+						type="text"
+					/>
+				</label>
+			{/if}
+		</div>
+
+		<div class="control-block">
+			<div class="toggle-row">
+				<div class="toggle-copy">
+					<p class="control-title">Owner-controlled soundboard</p>
+					<p class="quiet">Manual mode keeps the room cues under a clear crowd limit.</p>
+				</div>
+				<label class="switch">
+					<input
+						checked={soundboardDraft.kind === 'manual'}
+						onchange={(event) => setManualMode((event.currentTarget as HTMLInputElement).checked)}
+						type="checkbox"
+					/>
+					<span class="switch-track"></span>
+				</label>
+			</div>
+
+			{#if soundboardDraft.kind === 'manual'}
+				<div class="manual-controls" transition:fade={fadeTransition}>
+					<label class="checkline">
+						<input bind:checked={soundboardDraft.enabled} type="checkbox" />
+						<span>Enable soundboard cues</span>
+					</label>
+
+					<label class="slider-line">
+						<span>Max participants</span>
+						<strong>{soundboardDraft.maxParticipants}</strong>
+						<input
+							bind:value={soundboardDraft.maxParticipants}
+							class="range-input"
+							max="24"
+							min="2"
+							type="range"
+						/>
+					</label>
+				</div>
+			{/if}
+		</div>
 	</div>
 
-	<div class="summary-line">
+	<div class="summary-bar">
 		<p class="eyebrow">Preview</p>
 		<p class="quiet">{soundboardPreview}</p>
 	</div>
@@ -230,75 +241,12 @@
 		</p>
 	{/if}
 
-	<button class="button-primary submit-button" disabled={isSubmitting} type="submit">
-		{isSubmitting ? 'Cutting the room...' : 'Create Room'}
-	</button>
+	<div class="submit-row">
+		<p class="quiet">
+			The room code is created from the room itself, not from the watch link.
+		</p>
+		<button class="button-primary" disabled={isSubmitting} type="submit">
+			{isSubmitting ? 'Cutting the room...' : 'Create Room'}
+		</button>
+	</div>
 </form>
-
-<style>
-	.creation-panel {
-		display: grid;
-		gap: 1rem;
-		padding: 1.35rem;
-	}
-
-	.switch-card,
-	.policy-card {
-		border-top: 1px solid var(--panel-rule);
-		border-radius: 0;
-		background: transparent;
-		padding: 1rem 0 0;
-	}
-
-	.switch-card,
-	.policy-header {
-		display: flex;
-		gap: 1rem;
-		align-items: start;
-		justify-content: space-between;
-	}
-
-	.control-title {
-		margin: 0;
-		font-size: 0.8rem;
-		font-weight: 800;
-		letter-spacing: 0.11em;
-		text-transform: uppercase;
-	}
-
-	.manual-controls {
-		display: grid;
-		gap: 1rem;
-		margin-top: 1rem;
-		padding-top: 1rem;
-		border-top: 1px solid var(--line-soft);
-	}
-
-	.checkline,
-	.slider-line {
-		display: grid;
-		gap: 0.45rem;
-	}
-
-	.checkline {
-		grid-template-columns: auto 1fr;
-		align-items: center;
-	}
-
-	.checkline span,
-	.slider-line span {
-		font-size: 0.95rem;
-		font-weight: 600;
-		letter-spacing: -0.01em;
-		text-transform: none;
-	}
-
-	.summary-line {
-		padding-top: 1rem;
-		border-top: 1px solid var(--line-soft);
-	}
-
-	.submit-button {
-		margin-top: 0.2rem;
-	}
-</style>

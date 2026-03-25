@@ -458,22 +458,24 @@
 	<main class="shell room-shell">
 		<RoomHeading {onlineParticipantCount} {room} {soundboardEnabled} />
 
-		<section class="room-grid">
-			<StagePanel
-				{canUseStageInteraction}
-				cursors={renderedCursors}
-				onCursorMove={onCursorMove}
-				onPointerLeave={onPointerLeave}
-				onStageModeChange={onStageModeChange}
-				roomCode={room.roomCode}
-				selfSessionId={$sessionProfile.sessionId}
-				{stageIsInteractive}
-				{stageMode}
-				{stageStatusMessage}
-				watchFrameUrl={watchFrameUrl ?? room.watchUrl}
-			/>
+		<section class="room-layout">
+			<div class="room-stage-column">
+				<StagePanel
+					{canUseStageInteraction}
+					cursors={renderedCursors}
+					onCursorMove={onCursorMove}
+					onPointerLeave={onPointerLeave}
+					onStageModeChange={onStageModeChange}
+					roomCode={room.roomCode}
+					selfSessionId={$sessionProfile.sessionId}
+					{stageIsInteractive}
+					{stageMode}
+					{stageStatusMessage}
+					watchFrameUrl={watchFrameUrl ?? room.watchUrl}
+				/>
+			</div>
 
-			<div class="stack">
+			<aside class="room-rail">
 				<SoundboardPanel
 					error={soundError}
 					events={soundEvents}
@@ -488,8 +490,10 @@
 					title="Your session"
 					updateDisplayName={updateDisplayName}
 				/>
+			</aside>
 
-				{#if isOwner}
+			{#if isOwner}
+				<div class="room-owner-span">
 					<OwnerPanel
 						onSave={saveOwnerSettings}
 						onToggleParticipantStageControl={onToggleParticipantStageControl}
@@ -501,31 +505,8 @@
 						stageInteractionPolicy={room.stageInteractionPolicy}
 						{updatingParticipantSessionId}
 					/>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</section>
 	</main>
 {/if}
-
-<style>
-	.room-shell {
-		padding-bottom: 3rem;
-	}
-
-	.room-grid {
-		display: grid;
-		gap: 1.35rem;
-	}
-
-	.stack {
-		display: grid;
-		gap: 1.35rem;
-	}
-
-	@media (min-width: 1024px) {
-		.room-grid {
-			grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 0.65fr);
-			align-items: start;
-		}
-	}
-</style>

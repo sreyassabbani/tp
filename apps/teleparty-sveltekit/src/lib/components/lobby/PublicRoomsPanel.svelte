@@ -18,11 +18,11 @@
 </script>
 
 <section class="panel rooms-panel">
-		<div class="panel-header">
-			<p class="eyebrow">Lobby</p>
-			<h2 class="panel-title">Public Rooms</h2>
-			<p class="quiet">Fresh rooms you can step into right now.</p>
-		</div>
+	<div class="panel-header">
+		<p class="eyebrow">Lobby</p>
+		<h2 class="panel-title">Public Rooms</h2>
+		<p class="quiet">Fresh rooms you can actually step into right now.</p>
+	</div>
 
 	{#if error}
 		<p class="error-banner panel-error">{error}</p>
@@ -31,66 +31,32 @@
 	{:else if rooms.length === 0}
 		<div class="empty-state panel-copy">
 			<p class="empty-title">No public rooms yet.</p>
-			<p class="quiet">Create one above and this space becomes the live lobby ledger.</p>
+			<p class="quiet">Create one above and the lobby becomes a live list instead of an empty desk.</p>
 		</div>
 	{:else}
 		<div class="room-ledger">
 			{#each rooms as room, index (room.roomCode)}
-					<button
-						class="room-entry"
-						in:fly={{ ...flyTransition, delay: $reducedMotion ? 0 : 120 + index * 60 }}
-						onclick={() => onOpenRoom(room.roomCode)}
-						type="button"
-					>
-					<span class="room-host">{room.watchHost}</span>
-					<strong>Room {room.roomCode}</strong>
-					<span class="quiet">
-						Hosted by {room.createdByDisplayName} · {room.participantCount} active
-					</span>
+				<button
+					class="room-entry"
+					in:fly={{ ...flyTransition, delay: $reducedMotion ? 0 : 120 + index * 60 }}
+					onclick={() => onOpenRoom(room.roomCode)}
+					type="button"
+				>
+					<div class="room-entry-top">
+						<span class="room-host">{room.watchHost}</span>
+						<span class="pill" data-tone="accent">{room.participantCount} live</span>
+					</div>
+					<div class="room-entry-title">
+						<strong>Room {room.roomCode}</strong>
+						<span class="pill" data-tone={room.soundboardPolicy.kind === 'manual' ? 'muted' : 'success'}>
+							{room.soundboardPolicy.kind === 'manual' ? 'manual soundboard' : 'auto soundboard'}
+						</span>
+					</div>
+					<p class="quiet">
+						Hosted by {room.createdByDisplayName}
+					</p>
 				</button>
 			{/each}
 		</div>
 	{/if}
 </section>
-
-<style>
-	.rooms-panel {
-		padding: 1.35rem;
-	}
-
-	.panel-error,
-	.panel-copy {
-		margin-top: 1rem;
-	}
-
-	.room-ledger {
-		display: grid;
-		gap: 0.8rem;
-		margin-top: 1rem;
-	}
-
-	.room-entry {
-		display: grid;
-		gap: 0.28rem;
-		align-items: start;
-		border: 1px solid var(--line-soft);
-		border-radius: 1.4rem;
-		background: var(--surface-muted);
-		padding: 1rem;
-		text-align: left;
-	}
-
-	.room-entry:hover {
-		transform: translateY(-2px);
-		border-color: color-mix(in oklch, var(--signal) 46%, white 54%);
-		background: color-mix(in oklch, white 58%, var(--signal-wash) 42%);
-	}
-
-	.room-host {
-		font-size: 0.78rem;
-		font-weight: 800;
-		letter-spacing: 0.11em;
-		text-transform: uppercase;
-		color: var(--signal);
-	}
-</style>

@@ -10,20 +10,20 @@
 	let { onlineParticipantCount, room, soundboardEnabled }: RoomHeadingProps = $props();
 </script>
 
-<section class="room-heading">
-	<div class="heading-copy">
+<section class="room-hero">
+	<div class="room-hero-copy">
 		<p class="eyebrow">Live Screening Room</p>
-		<h1>Room {room.roomCode}</h1>
+		<h1 class="room-hero-title">Room {room.roomCode}</h1>
 		<p class="quiet">
-			Owner: {room.createdByDisplayName} · {onlineParticipantCount} active participant{onlineParticipantCount === 1
+			Watching {room.watchHost} with {onlineParticipantCount} active participant{onlineParticipantCount === 1
 				? ''
-				: 's'}
+				: 's'}, hosted by {room.createdByDisplayName}.
 		</p>
 	</div>
 
-	<div class="heading-actions">
-		<span class="pill">{room.visibility.kind}</span>
-		<span class="pill" class:muted={!soundboardEnabled}>
+	<div class="room-hero-actions">
+		<span class="pill" data-tone="muted">{room.visibility.kind}</span>
+		<span class="pill" data-tone={soundboardEnabled ? 'success' : 'muted'}>
 			{soundboardEnabled ? 'soundboard live' : 'soundboard gated'}
 		</span>
 		<a class="button-secondary" href={room.watchUrl} rel="noreferrer" target="_blank">
@@ -31,30 +31,3 @@
 		</a>
 	</div>
 </section>
-
-<style>
-	.room-heading {
-		display: grid;
-		gap: 1rem;
-		margin-bottom: 1.35rem;
-	}
-
-	h1 {
-		margin: 0;
-		font-family: var(--font-display);
-		font-size: clamp(2.8rem, 7vw, 5rem);
-		line-height: 0.98;
-		letter-spacing: -0.045em;
-	}
-
-	.heading-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		align-items: center;
-	}
-
-	.muted {
-		color: var(--ink-soft);
-	}
-</style>

@@ -5,24 +5,22 @@
 	import { onMount } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { api } from '$lib/convex-api';
 	import {
 		DEFAULT_AUTO_SOUNDBOARD_CAPACITY,
+		DEFAULT_STAGE_INTERACTION_POLICY,
 		createRoomInputSchema,
 		type SoundboardPolicy
 	} from '$lib/teleparty-domain';
-	import {
-		createRoomRecord,
-		hydrateRooms,
-		listPublicRooms,
-		roomsReady,
-		roomsStore
-	} from '$lib/rooms';
 	import {
 		hydrateSessionProfile,
 		sessionProfile,
 		sessionReady,
 		updateSessionProfile
 	} from '$lib/session';
+
+	const client = useConvexClient();
 
 	const cinematicPresets = [
 		{
@@ -39,6 +37,11 @@
 		}
 	];
 
+	const publicRoomsQuery = useQuery(api.rooms.listPublicRooms, () => ({
+		limit: 12
+	}));
+	const roomPolicyQuery = useQuery(api.rooms.defaultRoomPolicy, () => ({}));
+
 	let watchUrl = '';
 	let isPrivate = false;
 	let accessCode = '';
@@ -49,14 +52,34 @@
 	let isSubmitting = false;
 	let error: string | null = null;
 
-	$: publicRooms = listPublicRooms($roomsStore);
+	$: autoCapacity =
+		roomPolicyQuery.data?.soundboardPolicy.defaultMaxParticipants ??
+		DEFAULT_AUTO_SOUNDBOARD_CAPACITY;
+	$: publicRooms = publicRoomsQuery.data ?? [];
+	$: soundboardPreview =
+		draftSoundboardPolicy.kind === 'manual'
+			? `${draftSoundboardPolicy.enabled ? 'Enabled' : 'Disabled'} up to ${draftSoundboardPolicy.maxParticipants} participants`
+			: `Auto mode: enabled up to ${draftSoundboardPolicy.defaultMaxParticipants} participants`;
+
+	$: if (
+		draftSoundboardPolicy.kind === 'auto' &&
+		draftSoundboardPolicy.defaultMaxParticipants !== autoCapacity
+	) {
+		draftSoundboardPolicy = {
+			kind: 'auto',
+			defaultMaxParticipants: autoCapacity
+		};
+	}
 
 	onMount(() => {
 		hydrateSessionProfile();
-		hydrateRooms();
 	});
 
 	function updateDisplayName(value: string) {
+		if (!$sessionReady) {
+			return;
+		}
+
 		updateSessionProfile((current) => ({
 			...current,
 			displayName: value
@@ -65,13 +88,15 @@
 
 	async function onCreateRoomSubmit() {
 		error = null;
+
+		if (!$sessionReady) {
+			error = 'Session is still initializing. Retry in a moment.';
+			return;
+		}
+
 		isSubmitting = true;
 
 		try {
-			if (!$sessionReady) {
-				throw new Error('Session is still loading. Retry in a moment.');
-			}
-
 			const parsed = createRoomInputSchema.parse({
 				watchUrl,
 				visibility: isPrivate
@@ -82,14 +107,19 @@
 					: {
 							kind: 'public' as const
 						},
-				soundboardPolicy: draftSoundboardPolicy
+				soundboardPolicy: draftSoundboardPolicy,
+				stageInteractionPolicy: DEFAULT_STAGE_INTERACTION_POLICY
 			});
 
-			const room = createRoomRecord({
+			const room = await client.mutation(api.rooms.createRoom, {
 				watchUrl: parsed.watchUrl,
+				ownerSessionId: $sessionProfile.sessionId,
+				ownerSessionSecret: $sessionProfile.sessionSecret,
+				ownerDisplayName: $sessionProfile.displayName,
+				ownerColor: $sessionProfile.color,
 				visibility: parsed.visibility,
 				soundboardPolicy: parsed.soundboardPolicy,
-				sessionProfile: $sessionProfile
+				stageInteractionPolicy: parsed.stageInteractionPolicy
 			});
 
 			await goto(`/rooms/${room.roomCode}`);
@@ -105,22 +135,22 @@
 </script>
 
 <svelte:head>
-	<title>Teleparty Studio / SvelteKit Spike</title>
+	<title>Teleparty Studio / SvelteKit + Convex</title>
 	<meta
 		name="description"
-		content="A cinematic SvelteKit spike for local-first watch rooms, built to evaluate what Svelte can do for Teleparty."
+		content="A SvelteKit frontend for the Teleparty Clone Lab, wired to the live Convex backend."
 	/>
 </svelte:head>
 
 <div class="shell">
 	<section class="hero">
 		<div class="hero-copy" in:fly={{ y: 36, duration: 650, easing: quintOut }}>
-			<p class="eyebrow">Experimental SvelteKit Spike · Local-first Preview</p>
+			<p class="eyebrow">SvelteKit Frontend · Convex Backend</p>
 			<h1 class="hero-title">Build a screening room from any link.</h1>
 			<p class="hero-body">
-				This version is about feel. It swaps boilerplate cards for an editorial stage,
-				keeps the flow local and instant, and uses Svelte-native motion to make the
-				interface breathe.
+				This cut keeps the more editorial Svelte presentation, but it now runs against
+				the real Convex room, presence, cursor, and soundboard model instead of a
+				local browser vault.
 			</p>
 			<div class="preset-strip">
 				{#each cinematicPresets as preset, index (preset.label)}
@@ -139,11 +169,11 @@
 		</div>
 
 		<div class="hero-mast panel" in:fade={{ delay: 180, duration: 600 }}>
-			<p class="mast-label">Why this spike exists</p>
+			<p class="mast-label">What changed</p>
 			<ul class="mast-list">
-				<li>Push the stage UI toward something more cinematic and tactile</li>
-				<li>Test SvelteKit’s calmer SSR and route composition model</li>
-				<li>Use the new Impeccable design bundle instead of generic defaults</li>
+				<li>Live room creation now goes through Convex mutations</li>
+				<li>Public room counts react to real presence instead of local state</li>
+				<li>The SvelteKit branch can now be judged as a real frontend, not a mock</li>
 			</ul>
 		</div>
 	</section>
@@ -158,8 +188,8 @@
 				<p class="eyebrow">Studio</p>
 				<h2>Create Room</h2>
 				<p class="quiet">
-					Local-first for now, but the product shape mirrors the existing Teleparty
-					flow.
+					Parse-first room setup with explicit privacy and soundboard policy, backed by
+					Convex.
 				</p>
 			</div>
 
@@ -205,11 +235,11 @@
 									? {
 											kind: 'manual',
 											enabled: true,
-											maxParticipants: DEFAULT_AUTO_SOUNDBOARD_CAPACITY
+											maxParticipants: autoCapacity
 										}
 									: {
 											kind: 'auto',
-											defaultMaxParticipants: DEFAULT_AUTO_SOUNDBOARD_CAPACITY
+											defaultMaxParticipants: autoCapacity
 										};
 							}}
 							type="checkbox"
@@ -251,11 +281,16 @@
 				{/if}
 			</div>
 
+			<div class="summary-line">
+				<p class="eyebrow">Preview</p>
+				<p class="quiet">{soundboardPreview}</p>
+			</div>
+
 			{#if error}
 				<p class="error-banner" transition:fade>{error}</p>
 			{/if}
 
-			<button class="primary-action" disabled={isSubmitting || !$sessionReady} type="submit">
+			<button class="primary-action" disabled={isSubmitting} type="submit">
 				{isSubmitting ? 'Cutting the room...' : 'Create Room'}
 			</button>
 		</form>
@@ -281,6 +316,9 @@
 				<div class="session-metadata">
 					<p><span>Session</span><code>{$sessionProfile.sessionId}</code></p>
 					<p>
+						<span>Owner key</span><code>{$sessionProfile.sessionSecret}</code>
+					</p>
+					<p>
 						<span>Cursor tint</span>
 						<strong class="swatch" style={`--swatch:${$sessionProfile.color};`}>
 							{$sessionProfile.color}
@@ -294,19 +332,19 @@
 				in:fly={{ y: 28, delay: 180, duration: 650, easing: quintOut }}
 			>
 				<div class="panel-header">
-					<p class="eyebrow">Vault</p>
+					<p class="eyebrow">Lobby</p>
 					<h2>Public Rooms</h2>
-					<p class="quiet">Saved locally so you can jump back in fast while evaluating the spike.</p>
+					<p class="quiet">These rows are live Convex query results, not cached local entries.</p>
 				</div>
 
-				{#if !$roomsReady}
-					<p class="quiet">Opening the local vault...</p>
+				{#if publicRoomsQuery.error}
+					<p class="error-banner">{publicRoomsQuery.error.message}</p>
+				{:else if publicRoomsQuery.isLoading}
+					<p class="quiet">Syncing live room list...</p>
 				{:else if publicRooms.length === 0}
 					<div class="empty-state">
 						<p class="empty-title">No public rooms yet.</p>
-						<p class="quiet">
-							Create one above and this area turns into a little screening ledger.
-						</p>
+						<p class="quiet">Create one above and this area becomes the live lobby ledger.</p>
 					</div>
 				{:else}
 					<div class="room-ledger">
@@ -319,7 +357,9 @@
 							>
 								<span class="room-host">{room.watchHost}</span>
 								<strong>Room {room.roomCode}</strong>
-								<span class="quiet">Hosted by {room.ownerDisplayName}</span>
+								<span class="quiet">
+									Hosted by {room.createdByDisplayName} · {room.participantCount} active
+								</span>
 							</button>
 						{/each}
 					</div>
@@ -529,65 +569,61 @@
 		border-top: 1px solid var(--line-soft);
 	}
 
-	.checkline {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		font-weight: 600;
-	}
-
+	.checkline,
 	.slider-line {
 		display: grid;
-		gap: 0.5rem;
+		gap: 0.45rem;
 	}
 
-	.slider-line strong {
-		font-family: var(--font-display);
-		font-size: 1.6rem;
+	.checkline {
+		grid-template-columns: auto 1fr;
+		align-items: center;
 	}
 
-	input[type='range'] {
-		accent-color: var(--signal-strong);
-	}
-
-	.error-banner {
-		margin: 1rem 0 0;
-		border-radius: 1rem;
-		background: color-mix(in oklch, var(--alert) 14%, white 86%);
-		padding: 0.85rem 0.95rem;
-		color: oklch(38% 0.12 24);
-		font-size: 0.9rem;
+	.checkline span,
+	.slider-line span {
+		font-size: 0.95rem;
 		font-weight: 600;
+		letter-spacing: -0.01em;
+		text-transform: none;
+	}
+
+	.summary-line {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--line-soft);
+	}
+
+	.primary-action,
+	.room-entry {
+		border: none;
+		border-radius: 1.4rem;
+		cursor: pointer;
 	}
 
 	.primary-action {
 		margin-top: 1rem;
-		width: 100%;
-		border: none;
-		border-radius: 1.4rem;
 		background:
-			linear-gradient(135deg, color-mix(in oklch, var(--signal-strong) 78%, white 22%), color-mix(in oklch, var(--moss) 74%, white 26%));
-		padding: 1rem 1.2rem;
+			linear-gradient(135deg, color-mix(in oklch, var(--ink) 88%, white 12%), color-mix(in oklch, var(--signal-strong) 52%, var(--ink) 48%));
+		padding: 0.95rem 1.15rem;
 		color: white;
-		cursor: pointer;
-		font-size: 0.98rem;
-		font-weight: 800;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		box-shadow: 0 16px 36px rgba(59, 37, 18, 0.18);
 		transition:
 			transform 180ms var(--ease-out-quart),
-			box-shadow 180ms var(--ease-out-quart);
-		box-shadow: 0 18px 34px rgba(71, 53, 27, 0.22);
+			box-shadow 180ms var(--ease-out-quart),
+			opacity 180ms var(--ease-out-quart);
 	}
 
 	.primary-action:hover:enabled {
 		transform: translateY(-2px);
-		box-shadow: 0 24px 44px rgba(71, 53, 27, 0.28);
+		box-shadow: 0 20px 40px rgba(59, 37, 18, 0.22);
 	}
 
 	.primary-action:disabled {
-		cursor: wait;
-		opacity: 0.7;
+		cursor: progress;
+		opacity: 0.72;
 	}
 
 	.stack {
@@ -597,104 +633,113 @@
 
 	.session-metadata {
 		display: grid;
-		gap: 0.7rem;
+		gap: 0.75rem;
 		margin-top: 1rem;
-		border-top: 1px solid var(--line-soft);
 		padding-top: 1rem;
+		border-top: 1px solid var(--line-soft);
 	}
 
 	.session-metadata p {
-		display: flex;
-		gap: 0.8rem;
-		justify-content: space-between;
+		display: grid;
+		gap: 0.22rem;
 		margin: 0;
-		align-items: center;
-		font-size: 0.88rem;
 	}
 
-	code,
-	.swatch {
-		font-family: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
-	}
-
-	code {
-		max-width: 16ch;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	.session-metadata span {
+		font-size: 0.74rem;
+		font-weight: 800;
+		letter-spacing: 0.11em;
+		text-transform: uppercase;
 		color: var(--ink-soft);
+	}
+
+	.session-metadata code {
+		overflow-wrap: anywhere;
+		font-size: 0.78rem;
 	}
 
 	.swatch {
 		display: inline-flex;
-		gap: 0.55rem;
 		align-items: center;
+		gap: 0.55rem;
 	}
 
 	.swatch::before {
 		content: '';
-		width: 0.8rem;
-		height: 0.8rem;
+		display: inline-flex;
+		height: 0.85rem;
+		width: 0.85rem;
 		border-radius: 999px;
 		background: var(--swatch);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) inset;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.74);
 	}
 
 	.empty-state {
 		border: 1px dashed var(--line-soft);
-		border-radius: 1.3rem;
-		padding: 1.15rem;
+		border-radius: 1.6rem;
+		padding: 1rem;
 	}
 
 	.empty-title {
-		margin: 0 0 0.45rem;
+		margin: 0 0 0.25rem;
 		font-family: var(--font-display);
-		font-size: 1.3rem;
+		font-size: 1.4rem;
+		letter-spacing: -0.03em;
 	}
 
 	.room-ledger {
 		display: grid;
 		gap: 0.8rem;
+		margin-top: 1rem;
 	}
 
 	.room-entry {
 		display: grid;
-		gap: 0.22rem;
+		gap: 0.28rem;
+		align-items: start;
 		border: 1px solid var(--line-soft);
-		border-radius: 1.3rem;
-		background: color-mix(in oklch, white 78%, var(--paper-shadow) 22%);
-		padding: 0.95rem 1rem;
-		color: inherit;
-		cursor: pointer;
+		background: color-mix(in oklch, white 84%, var(--paper-shadow) 16%);
+		padding: 1rem;
 		text-align: left;
 		transition:
-			transform 160ms var(--ease-out-quart),
-			border-color 160ms var(--ease-out-quart),
-			background 160ms var(--ease-out-quart);
+			transform 180ms var(--ease-out-quart),
+			border-color 180ms var(--ease-out-quart),
+			background 180ms var(--ease-out-quart);
 	}
 
 	.room-entry:hover {
-		transform: translateY(-3px);
-		border-color: color-mix(in oklch, var(--signal) 42%, white 58%);
-		background: color-mix(in oklch, white 62%, var(--signal-wash) 38%);
+		transform: translateY(-2px);
+		border-color: color-mix(in oklch, var(--signal) 46%, white 54%);
+		background: color-mix(in oklch, white 58%, var(--signal-wash) 42%);
 	}
 
 	.room-host {
-		font-size: 0.75rem;
+		font-size: 0.78rem;
 		font-weight: 800;
-		letter-spacing: 0.12em;
+		letter-spacing: 0.11em;
 		text-transform: uppercase;
 		color: var(--signal);
 	}
 
-	@media (min-width: 960px) {
+	.error-banner {
+		margin: 1rem 0 0;
+		border: 1px solid color-mix(in oklch, var(--alert) 42%, white 58%);
+		border-radius: 1rem;
+		background: color-mix(in oklch, var(--alert) 12%, white 88%);
+		padding: 0.8rem 0.9rem;
+		color: color-mix(in oklch, var(--alert) 86%, black 14%);
+		font-size: 0.92rem;
+		line-height: 1.5;
+	}
+
+	@media (min-width: 860px) {
 		.hero {
-			grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 0.65fr);
+			grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
 			align-items: end;
 		}
 
 		.dashboard {
-			grid-template-columns: minmax(0, 1.1fr) minmax(22rem, 0.9fr);
+			grid-template-columns: minmax(0, 1.18fr) minmax(19rem, 0.82fr);
 			align-items: start;
 		}
 	}

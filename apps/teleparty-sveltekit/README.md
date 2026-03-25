@@ -1,12 +1,12 @@
 # Teleparty SvelteKit Spike
 
-This app is an experimental SvelteKit frontend spike for the Teleparty Clone Lab.
+This app is an experimental SvelteKit frontend for the Teleparty Clone Lab.
 
-It is intentionally not a third parity backend implementation. Instead it focuses on:
+It is intentionally not a third backend. Instead it focuses on:
 
 - evaluating SvelteKit route and SSR ergonomics
 - testing more editorial motion and visual direction
-- exploring local-first room, cursor, drawing, and soundboard interactions
+- running the real Teleparty room model against the existing Convex backend
 
 ## Run
 
@@ -16,7 +16,7 @@ From the repo root:
 just sveltekit-dev
 ```
 
-The app runs on `http://localhost:3003`.
+This starts the Convex backend sync and the SvelteKit app on `http://localhost:3003`.
 
 ## Build
 
@@ -26,11 +26,11 @@ From the repo root:
 just sveltekit-build
 ```
 
-That runs `svelte-check` and a production build.
+That runs `svelte-check` and a production build with `PUBLIC_CONVEX_URL` wired from the Convex dev environment.
 
 ## Current model
 
-- room/session state is stored locally in `localStorage`
-- room creation uses the shared Teleparty parsing rules adapted for SvelteKit
-- stage tools include interact, cursor, and draw modes
+- session state is stored locally in `localStorage`
+- room, cursor, presence, and soundboard state come from the live Convex backend
+- the stage currently follows the Convex feature surface: interact and cursor modes
 - this app is the place to test design direction before deciding whether any ideas should move into the main Convex and Spacetime apps

@@ -2,31 +2,26 @@
 
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { fade, fly } from 'svelte/transition';
+	import { useConvexClient, useQuery } from 'convex-svelte';
 	import StageCursor from '$lib/components/StageCursor.svelte';
-	import StageDrawing from '$lib/components/StageDrawing.svelte';
+	import { api } from '$lib/convex-api';
+	import { startPresenceSession } from '$lib/convex-presence';
 	import { getRelativeCursorPosition } from '$lib/cursor-stage';
 	import {
+		canInteractWithStage,
 		canUseSoundboard,
 		getWatchFrameUrl,
 		normalizeRoomCode,
-		type SoundboardPolicy
+		type RoomCapability,
+		type SoundboardPolicy,
+		type StageInteractionPolicy
 	} from '$lib/teleparty-domain';
-	import type { StagePoint } from '$lib/rooms';
-	import {
-		addDrawingStroke,
-		appendSoundEvent,
-		clearDrawingStrokes,
-		hydrateRooms,
-		roomsReady,
-		roomsStore,
-		saveRoomSoundboardPolicy,
-		validateRoomAccess
-	} from '$lib/rooms';
 	import {
 		hydrateSessionProfile,
 		sessionProfile,
@@ -35,15 +30,21 @@
 	} from '$lib/session';
 	import { playSound, sounds } from '$lib/soundboard';
 
+	const client = useConvexClient();
+	const CURSOR_SEND_INTERVAL_MS = 40;
+
 	let draftAccessCode = '';
-	let hasJoined = false;
-	let joinError: string | null = null;
-	let soundError: string | null = null;
-	let drawError: string | null = null;
-	let settingsError: string | null = null;
-	let stageMode: 'interact' | 'cursor' | 'draw' = 'interact';
+	let submittedAccessCode: string | undefined = undefined;
+	let hasAttemptedJoin = false;
+
 	let ownerDraftPolicy: SoundboardPolicy | null = null;
-	let cursorContainer: HTMLDivElement | null = null;
+	let ownerDraftStagePolicy: StageInteractionPolicy | null = null;
+
+	let soundError: string | null = null;
+	let settingsError: string | null = null;
+	let participantAccessError: string | null = null;
+	let updatingParticipantSessionId: string | null = null;
+	let stageMode: 'cursor' | 'interact' = 'cursor';
 	let optimisticCursor:
 		| {
 				color: string;
@@ -53,8 +54,32 @@
 				y: number;
 		  }
 		| null = null;
-	let draftStroke: StagePoint[] = [];
-	let lastPolicySignature: string | null = null;
+
+	let cursorContainer: HTMLDivElement | null = null;
+	let lastCursorSentAt = 0;
+	let cursorFlushTimeout: number | null = null;
+	let cursorMutationInFlight = false;
+	let pendingCursorPayload:
+		| {
+				roomCode: string;
+				sessionId: string;
+				displayName: string;
+				color: string;
+				x: number;
+				y: number;
+		  }
+		| null = null;
+
+	let lastSyncedPolicySignature: string | null = null;
+	let lastSyncedStagePolicySignature: string | null = null;
+	let seenSoundEvents = new Set<string>();
+	let lastSeenRoomCode: string | null = null;
+
+	let activePresenceKey: string | null = null;
+	let stopPresenceSession: (() => void) | null = null;
+	let participantSyncKey: string | null = null;
+	let participantSyncInterval: number | null = null;
+	let previousRoomCode: string | null = null;
 
 	$: roomCode = (() => {
 		const rawRoomCode = $page.params.roomCode;
@@ -69,212 +94,426 @@
 		}
 	})();
 
-	$: room = roomCode
-		? $roomsStore.find((candidate) => candidate.roomCode === roomCode) ?? null
-		: null;
+	const roomLookupQuery = useQuery(api.rooms.getRoom, () =>
+		roomCode
+			? {
+					roomCode,
+					accessCode: submittedAccessCode
+				}
+			: 'skip'
+	);
+
+	const cursorsQuery = useQuery(api.rooms.listCursors, () =>
+		roomCode
+			? {
+					roomCode
+				}
+			: 'skip'
+	);
+
+	const soundEventsQuery = useQuery(api.rooms.listSoundEvents, () =>
+		roomCode
+			? {
+					roomCode,
+					limit: 40
+				}
+			: 'skip'
+	);
+
+	$: roomLookup = roomLookupQuery.data;
+	$: liveCursors = cursorsQuery.data ?? [];
+	$: soundEvents = soundEventsQuery.data ?? [];
+	$: room =
+		roomLookup?.kind === 'ok'
+			? roomLookup.room
+			: null;
 	$: watchFrameUrl = room ? getWatchFrameUrl(room.watchUrl) : null;
 	$: roomPolicy = room?.soundboardPolicy ?? null;
+	$: roomStagePolicy = room?.stageInteractionPolicy ?? null;
 	$: roomPolicySignature = roomPolicy ? JSON.stringify(roomPolicy) : null;
+	$: roomStagePolicySignature = roomStagePolicy
+		? JSON.stringify(roomStagePolicy)
+		: null;
+
 	$: if (!roomPolicySignature) {
-		lastPolicySignature = null;
+		lastSyncedPolicySignature = null;
 		ownerDraftPolicy = null;
-	} else if (lastPolicySignature !== roomPolicySignature) {
-		lastPolicySignature = roomPolicySignature;
+	} else if (lastSyncedPolicySignature !== roomPolicySignature) {
+		lastSyncedPolicySignature = roomPolicySignature;
 		ownerDraftPolicy = roomPolicy;
 	}
-	$: effectiveOwnerPolicy = ownerDraftPolicy ?? roomPolicy;
-	$: settingsDirty =
-		Boolean(roomPolicy && effectiveOwnerPolicy) &&
-		JSON.stringify(roomPolicy) !== JSON.stringify(effectiveOwnerPolicy);
-	$: participantCount = hasJoined ? 1 : 0;
-	$: soundboardEnabled = roomPolicy ? canUseSoundboard(roomPolicy, participantCount) : false;
-	$: isOwner = Boolean(room && room.ownerSessionId === $sessionProfile.sessionId);
-	$: if (room?.visibility.kind === 'public' && $sessionReady) {
-		hasJoined = true;
+
+	$: if (!roomStagePolicySignature) {
+		lastSyncedStagePolicySignature = null;
+		ownerDraftStagePolicy = null;
+	} else if (lastSyncedStagePolicySignature !== roomStagePolicySignature) {
+		lastSyncedStagePolicySignature = roomStagePolicySignature;
+		ownerDraftStagePolicy = roomStagePolicy;
 	}
-	$: previewStroke =
-		draftStroke.length >= 2
-			? {
-					color: $sessionProfile.color,
-					points: draftStroke
-				}
-			: null;
-	$: renderedParticipants = optimisticCursor
-		? [
-				{
-					...optimisticCursor,
-					x: optimisticCursor.x * 100,
-					y: optimisticCursor.y * 100
-				}
-			]
+
+	$: effectiveOwnerPolicy = ownerDraftPolicy ?? roomPolicy;
+	$: effectiveStagePolicy = ownerDraftStagePolicy ?? roomStagePolicy;
+	$: soundboardSettingsDirty =
+		Boolean(effectiveOwnerPolicy && roomPolicy) &&
+		JSON.stringify(effectiveOwnerPolicy) !== JSON.stringify(roomPolicy);
+	$: stageSettingsDirty =
+		Boolean(effectiveStagePolicy && roomStagePolicy) &&
+		JSON.stringify(effectiveStagePolicy) !== JSON.stringify(roomStagePolicy);
+	$: settingsDirty = soundboardSettingsDirty || stageSettingsDirty;
+	$: isOwner = Boolean(room && room.createdBySessionId === $sessionProfile.sessionId);
+	$: selfParticipant =
+		room?.participants.find((participant) => participant.sessionId === $sessionProfile.sessionId) ??
+		null;
+	$: selfCapabilities = selfParticipant?.capabilities ?? [];
+	$: canUseStageInteraction = room
+		? canInteractWithStage(room.stageInteractionPolicy, isOwner, selfCapabilities)
+		: false;
+	$: if (!canUseStageInteraction && stageMode === 'interact') {
+		stageMode = 'cursor';
+	}
+
+	$: onlineParticipantCount = room?.participantCount ?? 0;
+	$: soundboardEnabled = room
+		? canUseSoundboard(room.soundboardPolicy, onlineParticipantCount)
+		: false;
+	$: stageIsInteractive = canUseStageInteraction && stageMode === 'interact';
+	$: stageStatusMessage = stageIsInteractive
+		? 'Video controls are active. Shared cursor tracking pauses while you click inside the embed.'
+		: canUseStageInteraction
+			? 'Cursor mode is active. Switch to video controls when you need to click play, pause, or scrub.'
+			: 'This browser does not currently have direct video control. Ask the room owner for access or use Open Watch Link in a new tab.';
+
+	$: manageableParticipants = room
+		? [...room.participants]
+				.filter((participant) => participant.sessionId !== room.createdBySessionId)
+				.sort((left, right) => {
+					if (left.online !== right.online) {
+						return left.online ? -1 : 1;
+					}
+					return left.displayName.localeCompare(right.displayName);
+				})
 		: [];
+
+	$: renderedCursors = (() => {
+		const bySessionId = new Map<
+			string,
+			{
+				color: string;
+				displayName: string;
+				sessionId: string;
+				x: number;
+				y: number;
+			}
+		>();
+
+		for (const cursor of liveCursors) {
+			bySessionId.set(cursor.sessionId, {
+				color: cursor.color,
+				displayName: cursor.displayName,
+				sessionId: cursor.sessionId,
+				x: cursor.x * 100,
+				y: cursor.y * 100
+			});
+		}
+
+		if (optimisticCursor) {
+			bySessionId.set(optimisticCursor.sessionId, {
+				...optimisticCursor,
+				x: optimisticCursor.x * 100,
+				y: optimisticCursor.y * 100
+			});
+		}
+
+		return Array.from(bySessionId.values());
+	})();
+
+	$: if (roomCode !== previousRoomCode) {
+		previousRoomCode = roomCode;
+		optimisticCursor = null;
+		lastCursorSentAt = 0;
+	}
+
+	$: if (roomCode !== lastSeenRoomCode) {
+		lastSeenRoomCode = roomCode;
+		seenSoundEvents = new Set();
+	}
+
+	$: for (const event of soundEvents) {
+		if (seenSoundEvents.has(event.eventId)) {
+			continue;
+		}
+
+		seenSoundEvents.add(event.eventId);
+		const sound = sounds.find((candidate) => candidate.id === event.soundId);
+		if (sound) {
+			playSound(sound.id);
+		}
+	}
+
+	$: {
+		const nextPresenceKey =
+			browser && $sessionReady && roomCode && roomLookup?.kind === 'ok'
+				? `${roomCode}:${$sessionProfile.sessionId}`
+				: null;
+
+		if (nextPresenceKey !== activePresenceKey) {
+			stopPresenceSession?.();
+			stopPresenceSession = null;
+			activePresenceKey = nextPresenceKey;
+
+			if (nextPresenceKey && roomCode) {
+				stopPresenceSession = startPresenceSession({
+					baseUrl: PUBLIC_CONVEX_URL,
+					client,
+					roomId: roomCode,
+					userId: $sessionProfile.sessionId
+				});
+			}
+		}
+	}
+
+	$: {
+		const nextParticipantSyncKey =
+			browser && $sessionReady && roomCode && roomLookup?.kind === 'ok'
+				? `${roomCode}:${$sessionProfile.sessionId}:${$sessionProfile.displayName}:${$sessionProfile.color}`
+				: null;
+
+		if (nextParticipantSyncKey !== participantSyncKey) {
+			if (participantSyncInterval !== null) {
+				window.clearInterval(participantSyncInterval);
+				participantSyncInterval = null;
+			}
+
+			participantSyncKey = nextParticipantSyncKey;
+
+			if (nextParticipantSyncKey && roomCode) {
+				const activeRoomCode = roomCode;
+				const syncParticipantProfile = async () => {
+					try {
+						await client.mutation(api.rooms.upsertParticipantProfile, {
+							roomCode: activeRoomCode,
+							sessionId: $sessionProfile.sessionId,
+							displayName: $sessionProfile.displayName,
+							color: $sessionProfile.color
+						});
+					} catch {
+						// Ignore transient heartbeat errors; the next sync retries.
+					}
+				};
+
+				void syncParticipantProfile();
+				participantSyncInterval = window.setInterval(syncParticipantProfile, 20_000);
+			}
+		}
+	}
 
 	onMount(() => {
 		hydrateSessionProfile();
-		hydrateRooms();
+	});
+
+	onDestroy(() => {
+		stopPresenceSession?.();
+
+		if (participantSyncInterval !== null) {
+			window.clearInterval(participantSyncInterval);
+		}
+
+		if (cursorFlushTimeout !== null) {
+			window.clearTimeout(cursorFlushTimeout);
+		}
 	});
 
 	function updateDisplayName(value: string) {
+		if (!$sessionReady) {
+			return;
+		}
+
 		updateSessionProfile((current) => ({
 			...current,
 			displayName: value
 		}));
 	}
 
-	function onPrivateJoin() {
-		if (!room) {
+	function scheduleCursorFlush(delayMs: number) {
+		if (cursorFlushTimeout !== null) {
 			return;
 		}
 
-		if (!validateRoomAccess(room, draftAccessCode)) {
-			hasJoined = false;
-			joinError = 'That access code does not match this room.';
-			return;
-		}
-
-		hasJoined = true;
-		joinError = null;
+		cursorFlushTimeout = window.setTimeout(() => {
+			cursorFlushTimeout = null;
+			void flushCursorUpdate();
+		}, delayMs);
 	}
 
-	function onPointerMove(event: PointerEvent) {
-		if (stageMode !== 'cursor' || !hasJoined || !cursorContainer) {
+	async function flushCursorUpdate() {
+		if (cursorMutationInFlight) {
 			return;
 		}
 
-		const point = getRelativeCursorPosition(cursorContainer.getBoundingClientRect(), event);
-		if (!point) {
+		const payload = pendingCursorPayload;
+		if (!payload) {
 			return;
 		}
 
-		optimisticCursor = {
-			color: $sessionProfile.color,
-			displayName: $sessionProfile.displayName,
-			sessionId: $sessionProfile.sessionId,
-			x: point.x,
-			y: point.y
-		};
+		const elapsed = Date.now() - lastCursorSentAt;
+		if (elapsed < CURSOR_SEND_INTERVAL_MS) {
+			scheduleCursorFlush(CURSOR_SEND_INTERVAL_MS - elapsed);
+			return;
+		}
+
+		pendingCursorPayload = null;
+		cursorMutationInFlight = true;
+		lastCursorSentAt = Date.now();
+
+		try {
+			await client.mutation(api.rooms.upsertCursor, payload);
+		} catch {
+			// Ignore transient cursor sync failures; the next move retries with latest state.
+		} finally {
+			cursorMutationInFlight = false;
+			if (pendingCursorPayload) {
+				void flushCursorUpdate();
+			}
+		}
 	}
 
 	function onPointerLeave() {
+		lastCursorSentAt = 0;
 		optimisticCursor = null;
 	}
 
-	function getStagePoint(event: PointerEvent): StagePoint | null {
-		if (!cursorContainer) {
-			return null;
+	function onCursorMove(event: PointerEvent) {
+		if (!roomCode || !room || stageIsInteractive || !cursorContainer) {
+			return;
 		}
 
-		return getRelativeCursorPosition(cursorContainer.getBoundingClientRect(), event);
+		const cursorPosition = getRelativeCursorPosition(
+			cursorContainer.getBoundingClientRect(),
+			event
+		);
+		if (!cursorPosition) {
+			return;
+		}
+
+		const payload = {
+			roomCode,
+			sessionId: $sessionProfile.sessionId,
+			displayName: $sessionProfile.displayName,
+			color: $sessionProfile.color,
+			x: cursorPosition.x,
+			y: cursorPosition.y
+		};
+
+		optimisticCursor = {
+			color: payload.color,
+			displayName: payload.displayName,
+			sessionId: payload.sessionId,
+			x: payload.x,
+			y: payload.y
+		};
+
+		pendingCursorPayload = payload;
+		void flushCursorUpdate();
 	}
 
-	function onDrawPointerDown(event: PointerEvent & { currentTarget: EventTarget & HTMLDivElement }) {
-		if (stageMode !== 'draw' || !hasJoined) {
-			return;
-		}
-
-		const point = getStagePoint(event);
-		if (!point) {
-			return;
-		}
-
-		event.currentTarget.setPointerCapture(event.pointerId);
-		draftStroke = [point];
-		drawError = null;
-	}
-
-	function onDrawPointerMove(event: PointerEvent) {
-		if (stageMode !== 'draw' || draftStroke.length === 0) {
-			return;
-		}
-
-		const point = getStagePoint(event);
-		if (!point) {
-			return;
-		}
-
-		const lastPoint = draftStroke[draftStroke.length - 1];
-		if (Math.abs(lastPoint.x - point.x) < 0.005 && Math.abs(lastPoint.y - point.y) < 0.005) {
-			return;
-		}
-
-		draftStroke = [...draftStroke, point];
-	}
-
-	function commitDraftStroke() {
-		if (!roomCode || draftStroke.length < 2) {
-			draftStroke = [];
+	async function onSoundButtonClick(soundId: (typeof sounds)[number]['id']) {
+		if (!roomCode || !room) {
 			return;
 		}
 
 		try {
-			addDrawingStroke(roomCode, {
+			await client.mutation(api.rooms.triggerSound, {
+				roomCode,
+				sessionId: $sessionProfile.sessionId,
+				displayName: $sessionProfile.displayName,
 				color: $sessionProfile.color,
-				points: draftStroke
+				soundId
 			});
-			drawError = null;
-		} catch (error) {
-			drawError = error instanceof Error ? error.message : 'Failed to save drawing.';
-		} finally {
-			draftStroke = [];
-		}
-	}
-
-	function onDrawPointerUp(event: PointerEvent & { currentTarget: EventTarget & HTMLDivElement }) {
-		if (stageMode !== 'draw') {
-			return;
-		}
-
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-			event.currentTarget.releasePointerCapture(event.pointerId);
-		}
-
-		commitDraftStroke();
-	}
-
-	function onSoundButtonClick(soundId: (typeof sounds)[number]['id']) {
-		if (!roomCode || !hasJoined) {
-			return;
-		}
-
-		try {
-			appendSoundEvent(roomCode, $sessionProfile.displayName, soundId);
-			playSound(soundId);
 			soundError = null;
-		} catch (error) {
-			soundError = error instanceof Error ? error.message : 'Sound request failed.';
+		} catch (unknownError) {
+			soundError =
+				unknownError instanceof Error
+					? unknownError.message
+					: 'Sound request failed.';
 		}
 	}
 
-	function onSaveSettings() {
-		if (!roomCode || !effectiveOwnerPolicy) {
+	async function onToggleParticipantStageControl(participant: {
+		sessionId: string;
+		capabilities: RoomCapability[];
+	}) {
+		if (!roomCode || !room) {
+			return;
+		}
+
+		const hasStageControl = participant.capabilities.includes('stage_control');
+		const nextCapabilities = hasStageControl
+			? participant.capabilities.filter((capability) => capability !== 'stage_control')
+			: [...participant.capabilities, 'stage_control'];
+
+		try {
+			updatingParticipantSessionId = participant.sessionId;
+			await client.mutation(api.rooms.setParticipantCapabilities, {
+				roomCode,
+				ownerSessionId: $sessionProfile.sessionId,
+				ownerSessionSecret: $sessionProfile.sessionSecret,
+				participantSessionId: participant.sessionId,
+				capabilities: nextCapabilities
+			});
+			participantAccessError = null;
+		} catch (unknownError) {
+			participantAccessError =
+				unknownError instanceof Error
+					? unknownError.message
+					: 'Failed to update participant access.';
+		} finally {
+			updatingParticipantSessionId = null;
+		}
+	}
+
+	async function onSaveOwnerSettings() {
+		if (!roomCode || !room || !effectiveOwnerPolicy || !effectiveStagePolicy) {
 			return;
 		}
 
 		try {
-			saveRoomSoundboardPolicy(roomCode, $sessionProfile.sessionId, effectiveOwnerPolicy);
+			if (soundboardSettingsDirty) {
+				await client.mutation(api.rooms.updateSoundboardPolicy, {
+					roomCode,
+					ownerSessionId: $sessionProfile.sessionId,
+					ownerSessionSecret: $sessionProfile.sessionSecret,
+					soundboardPolicy: effectiveOwnerPolicy
+				});
+			}
+
+			if (stageSettingsDirty) {
+				await client.mutation(api.rooms.updateStageInteractionPolicy, {
+					roomCode,
+					ownerSessionId: $sessionProfile.sessionId,
+					ownerSessionSecret: $sessionProfile.sessionSecret,
+					stageInteractionPolicy: effectiveStagePolicy
+				});
+			}
+
+			ownerDraftPolicy = null;
+			ownerDraftStagePolicy = null;
 			settingsError = null;
-		} catch (error) {
+		} catch (unknownError) {
 			settingsError =
-				error instanceof Error ? error.message : 'Failed to save owner settings.';
+				unknownError instanceof Error
+					? unknownError.message
+					: 'Failed to save owner settings.';
 		}
 	}
 
-	function onClearDrawings() {
-		if (!roomCode) {
-			return;
-		}
-
-		try {
-			clearDrawingStrokes(roomCode, $sessionProfile.sessionId);
-			drawError = null;
-		} catch (error) {
-			drawError = error instanceof Error ? error.message : 'Failed to clear drawings.';
-		}
+	function onPrivateJoin() {
+		hasAttemptedJoin = true;
+		submittedAccessCode = draftAccessCode;
 	}
 </script>
 
 <svelte:head>
-	<title>{roomCode ? `Room ${roomCode} / SvelteKit Spike` : 'Room / SvelteKit Spike'}</title>
+	<title>{roomCode ? `Room ${roomCode} / SvelteKit + Convex` : 'Room / SvelteKit + Convex'}</title>
 </svelte:head>
 
 {#if !roomCode}
@@ -282,50 +521,60 @@
 		<section class="panel state-panel">
 			<p class="eyebrow">Invalid room code</p>
 			<h1>That room code does not exist in this cut.</h1>
+			<p class="quiet">Room codes use six characters from A-Z without I/O and digits 2-9.</p>
 		</section>
 	</div>
-{:else if !$roomsReady}
+{:else if roomLookupQuery.error}
+	<div class="shell room-shell">
+		<section class="panel state-panel">
+			<p class="eyebrow">Connection error</p>
+			<h1>The Convex room query failed.</h1>
+			<p class="quiet">{roomLookupQuery.error.message}</p>
+		</section>
+	</div>
+{:else if roomLookupQuery.isLoading}
 	<div class="shell room-shell">
 		<section class="panel state-panel">
 			<p class="eyebrow">Loading</p>
 			<h1>Opening the screening room...</h1>
-			<p class="quiet">This local-first spike reads from the browser vault on load.</p>
+			<p class="quiet">Waiting for the live Convex subscription to settle.</p>
 		</section>
 	</div>
-{:else if !room}
+{:else if roomLookup?.kind === 'not_found'}
 	<div class="shell room-shell">
 		<section class="panel state-panel">
 			<p class="eyebrow">Missing room</p>
-			<h1>Nothing is stored under {roomCode}.</h1>
+			<h1>Nothing active is stored under {roomCode}.</h1>
+			<p class="quiet">The room may have expired due to inactivity.</p>
 			<button class="ghost-action" on:click={() => goto('/')} type="button">Back to lobby</button>
 		</section>
 	</div>
-{:else if room.visibility.kind === 'private' && !hasJoined}
+{:else if roomLookup?.kind === 'forbidden'}
 	<div class="shell room-shell">
 		<section class="panel private-panel" in:fade={{ duration: 220 }}>
 			<p class="eyebrow">Private room</p>
-			<h1>Enter the access code for room {room.roomCode}.</h1>
-			<p class="quiet">This spike keeps room gates local, but the flow mirrors the main product.</p>
+			<h1>Enter the access code for room {roomCode}.</h1>
+			<p class="quiet">Convex checks the gate server-side before the room subscription opens.</p>
 			<form class="private-form" on:submit|preventDefault={onPrivateJoin}>
 				<label class="field">
 					<span>Access code</span>
 					<input bind:value={draftAccessCode} maxlength="16" placeholder="midnight-cut" type="text" />
 				</label>
-				{#if joinError}
-					<p class="error-banner">{joinError}</p>
+				{#if hasAttemptedJoin}
+					<p class="error-banner">That access code does not match this room.</p>
 				{/if}
 				<button class="primary-action" type="submit">Join Room</button>
 			</form>
 		</section>
 	</div>
-{:else}
+{:else if room}
 	<div class="shell room-shell">
 		<section class="room-heading" in:fly={{ y: 24, duration: 620, easing: quintOut }}>
 			<div>
-				<p class="eyebrow">SvelteKit spike · Local-first stage</p>
+				<p class="eyebrow">SvelteKit frontend · Convex room</p>
 				<h1>Room {room.roomCode}</h1>
 				<p class="quiet">
-					Hosted by {room.ownerDisplayName} · {participantCount} active participant{participantCount === 1
+					Owner: {room.createdByDisplayName} · {onlineParticipantCount} active participant{onlineParticipantCount === 1
 						? ''
 						: 's'}
 				</p>
@@ -343,97 +592,62 @@
 				<div class="panel-header stage-header">
 					<div>
 						<p class="eyebrow">Shared stage</p>
-						<h2>Interact, sketch, then cut back to the film.</h2>
+						<h2>Cursor mode when you annotate, interact mode when you click the film.</h2>
 					</div>
 					<div class="stage-modes">
-						<button
-							class:active={stageMode === 'interact'}
-							on:click={() => {
-								stageMode = 'interact';
-								optimisticCursor = null;
-								draftStroke = [];
-							}}
-							type="button"
-						>
-							Interact
-						</button>
 						<button
 							class:active={stageMode === 'cursor'}
 							on:click={() => {
 								stageMode = 'cursor';
-								draftStroke = [];
 							}}
 							type="button"
 						>
 							Cursor
 						</button>
 						<button
-							class:active={stageMode === 'draw'}
+							class:active={stageMode === 'interact'}
+							disabled={!canUseStageInteraction}
 							on:click={() => {
-								stageMode = 'draw';
+								stageMode = 'interact';
 								optimisticCursor = null;
 							}}
 							type="button"
 						>
-							Draw
+							Interact
 						</button>
 					</div>
 				</div>
 
-				<p class="quiet stage-copy">
-					{stageMode === 'interact'
-						? 'Video controls are live. Browser sandboxing still means the overlay goes quiet while you click inside the embed.'
-						: stageMode === 'cursor'
-							? 'Cursor mode turns the stage into a soft annotation layer.'
-							: 'Draw mode lets you sketch directly over the frame and keep the marks in the local vault.'}
-				</p>
-
-				{#if drawError}
-					<p class="error-banner" transition:fade>{drawError}</p>
-				{/if}
+				<p class="quiet stage-copy">{stageStatusMessage}</p>
 
 				<div bind:this={cursorContainer} class="stage-frame">
 					<div class="frame-glow"></div>
 					<iframe
 						allowfullscreen
-						class:locked={stageMode !== 'interact'}
+						class:locked={!stageIsInteractive}
 						class="stage-iframe"
 						referrerpolicy="strict-origin-when-cross-origin"
 						src={watchFrameUrl ?? room.watchUrl}
 						title={`Room ${room.roomCode} watch frame`}
 					></iframe>
 
-					<StageDrawing previewStroke={previewStroke} strokes={room.drawingStrokes} />
-
-					{#if stageMode === 'cursor'}
+					{#if !stageIsInteractive}
 						<div
 							aria-hidden="true"
 							class="cursor-layer"
 							on:pointerleave={onPointerLeave}
-							on:pointermove={onPointerMove}
+							on:pointermove={onCursorMove}
 							role="presentation"
 						></div>
 					{/if}
 
-					{#if stageMode === 'draw'}
-						<div
-							aria-hidden="true"
-							class="draw-layer"
-							on:pointercancel={onDrawPointerUp}
-							on:pointerdown={onDrawPointerDown}
-							on:pointermove={onDrawPointerMove}
-							on:pointerup={onDrawPointerUp}
-							role="presentation"
-						></div>
-					{/if}
-
-					{#each renderedParticipants as participant (participant.sessionId)}
+					{#each renderedCursors as cursor (cursor.sessionId)}
 						<StageCursor
-							color={participant.color}
-							displayName={participant.displayName}
-							isSelf={participant.sessionId === $sessionProfile.sessionId}
-							x={participant.x}
-							y={participant.y}
+							color={cursor.color}
+							displayName={cursor.displayName}
+							isSelf={cursor.sessionId === $sessionProfile.sessionId}
+							x={cursor.x}
+							y={cursor.y}
 						/>
 					{/each}
 				</div>
@@ -450,7 +664,7 @@
 						{#each sounds as sound}
 							<button
 								class="sound-button"
-								disabled={!soundboardEnabled || !hasJoined}
+								disabled={!soundboardEnabled}
 								on:click={() => onSoundButtonClick(sound.id)}
 								type="button"
 							>
@@ -465,11 +679,11 @@
 
 					<div class="event-log">
 						<p class="eyebrow">Recent sounds</p>
-						{#if room.soundEvents.length === 0}
+						{#if soundEvents.length === 0}
 							<p class="quiet">Still quiet. Hit a sting and the ledger updates.</p>
 						{:else}
 							<div class="log-stack">
-								{#each [...room.soundEvents].reverse().slice(0, 6) as event (event.eventId)}
+								{#each soundEvents.slice(-6) as event (event.eventId)}
 									<p>{event.actorDisplayName} played {event.soundId}</p>
 								{/each}
 							</div>
@@ -493,6 +707,7 @@
 
 					<div class="session-metadata">
 						<p><span>Session</span><code>{$sessionProfile.sessionId}</code></p>
+						<p><span>Owner key</span><code>{$sessionProfile.sessionSecret}</code></p>
 						<p>
 							<span>Cursor tint</span>
 							<strong class="swatch" style={`--swatch:${$sessionProfile.color};`}>
@@ -565,6 +780,80 @@
 								</div>
 							{/if}
 
+							<div class="policy-card subtle-card">
+								<div class="policy-header">
+									<div>
+										<p class="switch-title">Guest video controls</p>
+										<p class="quiet">
+											Allow non-owners to click play, pause, and scrub inside the shared stage.
+										</p>
+									</div>
+									<label class="switch">
+										<input
+											checked={effectiveStagePolicy?.kind === 'everyone'}
+											on:change={(event) => {
+												ownerDraftStagePolicy = {
+													kind: (event.currentTarget as HTMLInputElement).checked
+														? 'everyone'
+														: 'owner_only'
+												};
+											}}
+											type="checkbox"
+										/>
+										<span></span>
+									</label>
+								</div>
+							</div>
+
+							<div class="participant-policy">
+								<div>
+									<p class="switch-title">Participant access</p>
+									<p class="quiet">
+										Grant direct stage control to specific guests when room-wide guest controls are off.
+									</p>
+								</div>
+
+								{#if manageableParticipants.length === 0}
+									<p class="quiet">Participants appear here after they join the room.</p>
+								{:else}
+									<div class="participant-stack">
+										{#each manageableParticipants as participant (participant.sessionId)}
+											<div class="participant-row">
+												<div class="participant-copy">
+													<div class="participant-topline">
+														<span
+															class="participant-dot"
+															style={`background-color:${participant.color};`}
+														></span>
+														<p>{participant.displayName}</p>
+														<span class:offline={!participant.online} class="participant-status">
+															{participant.online ? 'online' : 'offline'}
+														</span>
+													</div>
+													<p class="quiet participant-note">
+														{effectiveStagePolicy?.kind === 'everyone'
+															? 'Room-wide guest controls are on. Individual grants are stored but not needed right now.'
+															: participant.capabilities.includes('stage_control')
+																? 'Has direct stage control when guests are otherwise locked.'
+																: 'No direct stage control.'}
+													</p>
+												</div>
+												<label class="switch">
+													<input
+														checked={participant.capabilities.includes('stage_control')}
+														disabled={effectiveStagePolicy?.kind === 'everyone' ||
+															updatingParticipantSessionId === participant.sessionId}
+														on:change={() => onToggleParticipantStageControl(participant)}
+														type="checkbox"
+													/>
+													<span></span>
+												</label>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+
 							<label class="slider-line">
 								<span>Max participants</span>
 								<strong>
@@ -573,7 +862,7 @@
 										: effectiveOwnerPolicy?.defaultMaxParticipants ?? 0}
 								</strong>
 								<input
-									max="24"
+									max="40"
 									min="2"
 									on:input={(event) => {
 										const value = Number((event.currentTarget as HTMLInputElement).value);
@@ -593,13 +882,10 @@
 							</label>
 
 							<div class="owner-actions">
-								<button class="ghost-action" on:click={onClearDrawings} type="button">
-									Clear drawings
-								</button>
 								<button
 									class="primary-action compact"
 									disabled={!settingsDirty}
-									on:click={onSaveSettings}
+									on:click={onSaveOwnerSettings}
 									type="button"
 								>
 									Save settings
@@ -609,6 +895,10 @@
 
 						{#if settingsError}
 							<p class="error-banner">{settingsError}</p>
+						{/if}
+
+						{#if participantAccessError}
+							<p class="error-banner">{participantAccessError}</p>
 						{/if}
 					</section>
 				{/if}
@@ -726,7 +1016,8 @@
 		transition:
 			background 160ms var(--ease-out-quart),
 			color 160ms var(--ease-out-quart),
-			transform 160ms var(--ease-out-quart);
+			transform 160ms var(--ease-out-quart),
+			opacity 160ms var(--ease-out-quart);
 	}
 
 	.stage-modes button.active {
@@ -734,6 +1025,11 @@
 			linear-gradient(135deg, color-mix(in oklch, var(--ink) 88%, white 12%), color-mix(in oklch, var(--signal-strong) 52%, var(--ink) 48%));
 		color: white;
 		box-shadow: 0 12px 24px rgba(54, 35, 18, 0.18);
+	}
+
+	.stage-modes button:disabled {
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 
 	.stage-copy {
@@ -782,19 +1078,11 @@
 		pointer-events: none;
 	}
 
-	.cursor-layer,
-	.draw-layer {
+	.cursor-layer {
 		position: absolute;
 		inset: 0.7rem;
 		border-radius: 1.45rem;
-	}
-
-	.cursor-layer {
 		cursor: none;
-	}
-
-	.draw-layer {
-		cursor: crosshair;
 	}
 
 	.stack {
@@ -897,46 +1185,46 @@
 	}
 
 	.session-metadata p {
-		display: flex;
-		gap: 0.8rem;
-		justify-content: space-between;
+		display: grid;
+		gap: 0.22rem;
 		margin: 0;
-		align-items: center;
-		font-size: 0.88rem;
 	}
 
-	code,
-	.swatch {
-		font-family: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
-	}
-
-	code {
-		max-width: 16ch;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	.session-metadata span {
+		font-size: 0.74rem;
+		font-weight: 800;
+		letter-spacing: 0.11em;
+		text-transform: uppercase;
 		color: var(--ink-soft);
+	}
+
+	.session-metadata code {
+		overflow-wrap: anywhere;
+		font-size: 0.78rem;
 	}
 
 	.swatch {
 		display: inline-flex;
-		gap: 0.55rem;
 		align-items: center;
+		gap: 0.55rem;
 	}
 
 	.swatch::before {
 		content: '';
-		width: 0.8rem;
-		height: 0.8rem;
+		display: inline-flex;
+		height: 0.85rem;
+		width: 0.85rem;
 		border-radius: 999px;
 		background: var(--swatch);
-		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) inset;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.74);
 	}
 
 	.policy-card {
+		display: grid;
+		gap: 1rem;
 		margin-top: 1rem;
 		border: 1px solid var(--line-soft);
-		border-radius: 1.65rem;
+		border-radius: 1.7rem;
 		background: color-mix(in oklch, white 68%, var(--signal-wash) 32%);
 		padding: 1rem;
 	}
@@ -948,9 +1236,115 @@
 		justify-content: space-between;
 	}
 
+	.subtle-card {
+		margin-top: 0;
+	}
+
+	.participant-policy {
+		display: grid;
+		gap: 0.85rem;
+		padding: 1rem 0 0;
+		border-top: 1px solid var(--line-soft);
+	}
+
+	.participant-stack {
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.participant-row {
+		display: flex;
+		gap: 0.8rem;
+		align-items: start;
+		justify-content: space-between;
+		border: 1px solid var(--line-soft);
+		border-radius: 1.15rem;
+		background: color-mix(in oklch, white 78%, var(--paper-shadow) 22%);
+		padding: 0.9rem;
+	}
+
+	.participant-copy {
+		min-width: 0;
+	}
+
+	.participant-topline {
+		display: flex;
+		gap: 0.45rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.participant-topline p {
+		margin: 0;
+		font-size: 0.95rem;
+		font-weight: 700;
+	}
+
+	.participant-dot {
+		display: inline-flex;
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 999px;
+	}
+
+	.participant-status {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--moss) 18%, white 82%);
+		padding: 0.18rem 0.5rem;
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: color-mix(in oklch, var(--moss) 64%, black 36%);
+	}
+
+	.participant-status.offline {
+		background: color-mix(in oklch, black 10%, white 90%);
+		color: var(--ink-soft);
+	}
+
+	.participant-note {
+		margin-top: 0.35rem;
+		font-size: 0.82rem;
+	}
+
+	.manual-controls {
+		display: grid;
+		gap: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--line-soft);
+	}
+
+	.checkline,
+	.slider-line {
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	.checkline {
+		grid-template-columns: auto 1fr;
+		align-items: center;
+	}
+
+	.checkline span,
+	.slider-line span {
+		font-size: 0.95rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		text-transform: none;
+	}
+
+	.owner-actions {
+		display: flex;
+		justify-content: flex-start;
+	}
+
 	.switch {
 		position: relative;
 		display: inline-flex;
+		flex: none;
 	}
 
 	.switch input {
@@ -988,33 +1382,35 @@
 		transform: translateX(1.55rem);
 	}
 
-	.manual-controls {
-		margin-top: 1rem;
+	.switch input:disabled + span {
+		opacity: 0.5;
 	}
 
-	.checkline {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		font-weight: 600;
+	.primary-action,
+	.ghost-action {
+		border: none;
+		border-radius: 1.4rem;
+		cursor: pointer;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		text-decoration: none;
 	}
 
-	.slider-line {
-		display: grid;
-		gap: 0.5rem;
-		margin-top: 1rem;
+	.primary-action {
+		background:
+			linear-gradient(135deg, color-mix(in oklch, var(--ink) 88%, white 12%), color-mix(in oklch, var(--signal-strong) 52%, var(--ink) 48%));
+		padding: 0.95rem 1.15rem;
+		color: white;
+		box-shadow: 0 16px 36px rgba(59, 37, 18, 0.18);
 	}
 
-	.slider-line strong {
-		font-family: var(--font-display);
-		font-size: 1.6rem;
+	.primary-action.compact {
+		padding: 0.82rem 1rem;
 	}
 
-	.owner-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.7rem;
-		margin-top: 1rem;
+	.primary-action:disabled {
+		cursor: not-allowed;
+		opacity: 0.6;
 	}
 
 	.ghost-action {
@@ -1022,83 +1418,25 @@
 		align-items: center;
 		justify-content: center;
 		border: 1px solid var(--line-soft);
-		border-radius: 999px;
-		background: color-mix(in oklch, white 76%, var(--paper-shadow) 24%);
-		padding: 0.72rem 1rem;
-		color: inherit;
-		cursor: pointer;
-		font-weight: 700;
-		text-decoration: none;
-		transition:
-			transform 160ms var(--ease-out-quart),
-			border-color 160ms var(--ease-out-quart),
-			background 160ms var(--ease-out-quart);
-	}
-
-	.ghost-action:hover {
-		transform: translateY(-2px);
-		border-color: color-mix(in oklch, var(--signal) 42%, white 58%);
-		background: color-mix(in oklch, white 62%, var(--signal-wash) 38%);
-	}
-
-	.primary-action {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		border: none;
-		border-radius: 1.35rem;
-		background:
-			linear-gradient(135deg, color-mix(in oklch, var(--signal-strong) 78%, white 22%), color-mix(in oklch, var(--moss) 74%, white 26%));
-		padding: 0.95rem 1.2rem;
-		color: white;
-		cursor: pointer;
-		font-size: 0.95rem;
-		font-weight: 800;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		transition:
-			transform 180ms var(--ease-out-quart),
-			box-shadow 180ms var(--ease-out-quart);
-		box-shadow: 0 18px 34px rgba(71, 53, 27, 0.22);
-	}
-
-	.primary-action.compact {
-		padding-inline: 1.05rem;
-	}
-
-	.primary-action:hover:enabled {
-		transform: translateY(-2px);
-		box-shadow: 0 24px 44px rgba(71, 53, 27, 0.28);
-	}
-
-	.primary-action:disabled {
-		cursor: not-allowed;
-		opacity: 0.58;
+		background: color-mix(in oklch, white 84%, var(--paper-shadow) 16%);
+		padding: 0.75rem 1rem;
+		color: var(--ink);
 	}
 
 	.error-banner {
 		margin: 1rem 0 0;
+		border: 1px solid color-mix(in oklch, var(--alert) 42%, white 58%);
 		border-radius: 1rem;
-		background: color-mix(in oklch, var(--alert) 14%, white 86%);
-		padding: 0.85rem 0.95rem;
-		color: oklch(38% 0.12 24);
-		font-size: 0.9rem;
-		font-weight: 600;
+		background: color-mix(in oklch, var(--alert) 12%, white 88%);
+		padding: 0.8rem 0.9rem;
+		color: color-mix(in oklch, var(--alert) 86%, black 14%);
+		font-size: 0.92rem;
+		line-height: 1.5;
 	}
 
-	@media (min-width: 1040px) {
-		.room-heading {
-			grid-template-columns: minmax(0, 1fr) auto;
-			align-items: end;
-		}
-
-		.stage-header {
-			grid-template-columns: minmax(0, 1fr) auto;
-			align-items: start;
-		}
-
+	@media (min-width: 1024px) {
 		.room-grid {
-			grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 0.7fr);
+			grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 0.65fr);
 			align-items: start;
 		}
 	}

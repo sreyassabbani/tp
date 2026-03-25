@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { PUBLIC_CONVEX_URL } from '$env/static/public';
+	import { browser } from '$app/environment';
+	import { env } from '$env/dynamic/public';
 	import { setupConvex } from 'convex-svelte';
+	import { hydrateSessionProfile } from '$lib/session';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+
+	const PUBLIC_CONVEX_URL = env.PUBLIC_CONVEX_URL;
 
 	if (!PUBLIC_CONVEX_URL) {
 		throw new Error(
@@ -13,6 +17,14 @@
 	setupConvex(PUBLIC_CONVEX_URL);
 
 	let { children } = $props();
+
+	$effect(() => {
+		if (!browser) {
+			return;
+		}
+
+		hydrateSessionProfile();
+	});
 </script>
 
 <svelte:head>

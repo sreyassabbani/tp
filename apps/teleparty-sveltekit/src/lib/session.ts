@@ -72,6 +72,7 @@ function parseStoredProfile(raw: string): SessionProfile | null {
 
 export const sessionProfile = writable<SessionProfile>(SESSION_PROFILE_PLACEHOLDER);
 export const sessionReady = writable(false);
+let hasHydratedSessionProfile = false;
 
 export function loadSessionProfile(): SessionProfile {
 	if (!browser) {
@@ -97,8 +98,13 @@ export function loadSessionProfile(): SessionProfile {
 }
 
 export function hydrateSessionProfile(): void {
+	if (hasHydratedSessionProfile) {
+		return;
+	}
+
 	sessionProfile.set(loadSessionProfile());
 	sessionReady.set(true);
+	hasHydratedSessionProfile = true;
 }
 
 export function saveSessionProfile(profile: SessionProfile): SessionProfile {

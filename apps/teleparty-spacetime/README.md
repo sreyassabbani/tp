@@ -1,74 +1,31 @@
-# Teleparty SpacetimeDB Version
+# Teleparty — SpacetimeDB
 
-TanStack Start + shadcn UI + SpacetimeDB v2.0 TypeScript module.
+The SpacetimeDB implementation of the Teleparty Clone Lab.
 
-## Features
+It uses TanStack Start + React with a SpacetimeDB 2.0 TypeScript module and generated client bindings.
 
-- room creation from arbitrary watch URL
-- public/private rooms (private rooms use access code)
-- live cursor sync through participant table updates
-- shared drawing overlay through replicated Spacetime tables
-- soundboard events with participant-capacity gating
-- room-owner soundboard policy overrides
-- stage tool modes for `interact`, `cursor`, and `draw`
+## Run
 
-## Local run
-
-Recommended:
+From the repository root:
 
 ```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun install
-direnv exec /Users/sreysus/workflow/tp bun --cwd spacetimedb install
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+direnv allow
+just bootstrap
+just spacetime-dev
 ```
 
-`spacetime:dev` uses a repo wrapper around the Spacetime CLI to:
+Open `http://localhost:3002`. The local SpacetimeDB server listens on `127.0.0.1:3010`.
 
-- start the local SpacetimeDB server
-- publish the module
-- generate TypeScript bindings
-- keep the module watcher running
-- refresh bindings when module source changes
-- run the Vite web app
+`just spacetime-dev` starts the database when needed, publishes the module, regenerates TypeScript bindings, watches module changes, and runs the web app.
 
-If you are not using `spacetime:dev` and you change `spacetimedb/src/index.ts`,
-you must rerun publish + binding generation before the web app matches the backend
-schema.
+For the split workflow, see [`docs/commands.md`](../../docs/commands.md).
 
-Manual fallback:
+## Implementation notes
 
-1) Start local SpacetimeDB server:
+- Module source: `spacetimedb/src/index.ts`
+- Generated client bindings: `src/module_bindings/`
+- Frontend: `src/`
 
-```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun install
-direnv exec /Users/sreysus/workflow/tp bun --cwd spacetimedb install
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:start
-```
+This variant currently has the shared drawing overlay. Its ownership model is intentionally simpler than the Convex variant and does not mirror Convex's per-participant stage grants.
 
-2) Publish module and generate typed bindings:
-
-```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:publish:local
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
-```
-
-3) Start web app:
-
-```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun run dev
-```
-
-App URL: `http://localhost:3002`
-SpacetimeDB URL: `ws://127.0.0.1:3010`
-
-If publish auth gets stuck, delete `.spacetime/data` and restart `bun run spacetime:start`.
-
-## Build
-
-```bash
-direnv exec /Users/sreysus/workflow/tp bun run build
-```
+See [SpacetimeDB backend](../../docs/spacetime-backend.md), [feature matrix](../../docs/feature-matrix.md), and [troubleshooting](../../docs/troubleshooting.md).

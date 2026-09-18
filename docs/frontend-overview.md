@@ -1,102 +1,85 @@
 ---
-tags: [frontend, react, tanstack-start]
+tags: [frontend, react, tanstack-start, sveltekit]
 ---
 
-# Frontend Overview
+# Frontend overview
 
-<- [[index|Home]] / [[overview]]
+There are two closely matched TanStack Start frontends plus one SvelteKit experiment.
 
-Both app variants use nearly the same frontend structure. The main difference is the provider and data-access layer.
+## TanStack app shape
 
----
-
-## Route Shape
+Both main apps follow roughly:
 
 ```text
 src/
-|- routes/
-|  |- __root.tsx           # document shell + provider wrapper
-|  |- index.tsx            # room creation + public room list
-|  `- rooms.$roomCode.tsx  # live room view
-|- lib/
-|  |- teleparty-domain.ts  # shared schemas and helpers
-|  |- session.ts           # anonymous browser identity
-|  |- cursor-stage.ts      # stage coordinate math
-|  `- soundboard.ts        # sound metadata + playback helpers
-`- integrations/
-   |- convex/provider.tsx
-   `- spacetime/provider.tsx
+├── routes/
+│   ├── __root.tsx
+│   ├── index.tsx
+│   └── rooms.$roomCode.tsx
+├── lib/
+│   ├── teleparty-domain.ts
+│   ├── session.ts
+│   ├── cursor-stage.ts
+│   └── soundboard.ts
+└── integrations/
+    └── <backend provider>
 ```
 
----
+The route responsibilities are intentionally similar so the backend comparison is not dominated by unrelated frontend differences.
 
-## Route Responsibilities
+## Room route responsibilities
 
-### `__root.tsx`
-- sets document `<head>` metadata
-- loads global styles
-- mounts the backend-specific provider
-- wraps the page with shared header/footer chrome
+The live room route handles:
 
-### `index.tsx`
-- loads the local browser session profile
-- validates room creation inputs through Zod
-- creates rooms
-- lists public rooms
+- room-code parsing and private-room access
+- anonymous session identity
+- room/presence hydration
+- cursor publication and rendering
+- soundboard events
+- stage-mode switching
+- owner controls where the backend supports them
 
-### `rooms.$roomCode.tsx`
-- validates the room code from the URL
-- joins or loads a room
-- renders the shared stage iframe
-- sends cursor updates
-- shows soundboard events
-- exposes owner controls when the current browser owns the room
+## Stage modes are not identical
 
----
+### Convex TanStack app
 
-## Shared Client-Side Ideas
+- `cursor` — overlay captures pointer movement for shared cursors
+- `interact` — iframe receives pointer input
 
-### Anonymous Session Profile
-Each browser stores a local profile with:
-- `sessionId`
-- `displayName`
-- `color`
+### SpacetimeDB TanStack app
 
-Convex additionally stores a local `sessionSecret` to prove room ownership without forcing account login. See [[permissions-and-ownership]].
+- `cursor`
+- `interact`
+- `draw` — overlay records and replicates drawing strokes
 
-### Parse-First Inputs
-The UI does not trust raw strings late. It parses early:
-- watch URLs
-- room codes
-- access codes
-- soundboard policy
-- stage interaction policy
+### SvelteKit spike
 
-See [[domain-model]].
+The SvelteKit frontend currently follows the Convex surface:
 
-### Stage Interaction Modes
-The room stage uses three local modes:
-- `cursor` - shared cursor tracking stays active over the stage
-- `draw` - a drawing overlay captures pointer input and writes shared strokes
-- `interact` - the iframe becomes clickable so the user can start or control playback
+- `cursor`
+- `interact`
 
-This is a browser limitation tradeoff, not a backend limitation. Cross-origin iframes swallow pointer events.
+See [Feature matrix](feature-matrix.md).
 
-### Why The Cursor Feels Smoother In Spacetime
-The Spacetime room view does two things to keep movement feeling immediate:
-- it paints your own cursor optimistically in local React state before replicated rows catch up
-- it throttles reducer writes into a short sampled stream instead of firing every raw pointer event
+## Why cursor rendering has two paths
 
-That combination reduces visible lag without trying to mirror every single device event.
+Both main apps paint the local cursor optimistically so your own pointer does not need to wait for a backend round trip.
 
----
+Remote cursors still arrive through each backend's realtime model:
 
-## Provider Difference
+- Convex: mutations + subscribed query data
+- SpacetimeDB: reducer writes + replicated participant rows
 
-### Convex
-The app wraps the tree in a `ConvexProvider` with a `ConvexReactClient`.
+Both implementations also sample/throttle outbound pointer traffic rather than sending every raw device event.
 
-### SpacetimeDB
-The app wraps the tree in a `SpacetimeDBProvider` with a persistent database connection and generated bindings.
+## Cross-origin iframe constraint
 
-That one change cascades into a very different data flow. See [[data-flow]] and [[realtime-comparison]].
+The cursor/draw overlay and the iframe compete for pointer events. When `interact` is active, the iframe must receive them; when an overlay tool is active, the overlay must receive them.
+
+That is why stage mode exists at all. It is primarily a browser/iframe interaction constraint, not a backend constraint.
+
+## SvelteKit experiment
+
+`apps/teleparty-sveltekit` uses the live Convex backend but decomposes the UI into Svelte components such as lobby panels, stage panels, owner controls, and session cards.
+
+Its purpose is to test frontend ergonomics and design direction without adding another backend to the comparison.

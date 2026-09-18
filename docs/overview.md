@@ -2,82 +2,80 @@
 tags: [architecture, overview]
 ---
 
-# Architecture Overview
+# Architecture overview
 
-<- [[index|Home]]
+The repo asks a narrow question: how does the same small realtime room product feel when implemented with different backend models?
 
-This repo contains two separate web apps that implement the same Teleparty-style behavior with different realtime backends.
+## Applications
 
----
+### Convex main app
 
-## The Two Variants
+`apps/teleparty-convex`
 
-| Variant | Frontend | Backend / Realtime | Default URL |
-|--------|----------|--------------------|-------------|
-| **Convex** | TanStack Start + React | Convex queries, mutations, subscriptions, and components | `http://localhost:3001` |
-| **SpacetimeDB** | TanStack Start + React | SpacetimeDB tables, reducers, and client sync | `http://localhost:3002` |
+- TanStack Start + React frontend
+- Convex queries/mutations/subscriptions
+- Convex presence, rate limiting, and workflow components
+- stronger room-owner/participant permission model
 
-The frontend shape is intentionally similar in both apps. The backend transport and state model are what change.
+### SpacetimeDB main app
 
----
+`apps/teleparty-spacetime`
 
-## High-Level Shape
+- TanStack Start + React frontend
+- SpacetimeDB TypeScript module
+- reducers for writes
+- replicated tables for reads
+- generated TypeScript client bindings
+- shared drawing overlay
 
-```text
-Browser UI
-   |
-   |  shared route structure + shared domain schema ideas
-   |
-   +--> Convex client -> Convex backend -> Convex tables/components
-   |
-   `--> SpacetimeDB client -> Spacetime reducers -> replicated tables
-```
+### SvelteKit frontend spike
 
-Both apps support the same product concepts:
+`apps/teleparty-sveltekit`
 
-- a room is identified by a generated room code, not by the watch URL
-- the watch URL is parsed and normalized before use
-- a room can be public or private
-- shared cursors are rendered on top of the stage
-- the soundboard is gated by room policy
+- SvelteKit frontend
+- talks to the existing Convex backend
+- exists to evaluate frontend composition and interaction feel
+- is not a third backend in the comparison
 
-See [[domain-model]].
+See [Feature matrix](feature-matrix.md) before assuming the apps have identical features.
 
----
+## Shared product model, separate implementations
 
-## Why Two Backends?
+The two main apps intentionally mirror concepts such as:
 
-The point of this repo is not abstract portability. It is direct comparison.
+- room code and visibility
+- watch URL parsing
+- anonymous participant identity
+- cursor position
+- soundboard policy
 
-Convex emphasizes:
-- explicit query and mutation boundaries
-- backend validation and workflow orchestration
-- subscription-driven UI updates
+They do **not** share one common package that guarantees identical behavior. The rules are implemented separately and can drift. Documentation and manual parity checks matter.
 
-SpacetimeDB emphasizes:
-- reducers as the write path
-- replicated tables as the read path
-- lower-friction realtime fanout for hot state
+## State by temperature
 
-See [[realtime-comparison]].
+A useful way to read the architecture is by update frequency.
 
----
+### Durable / low-frequency
 
-## Monorepo Layout
+- room creation
+- privacy
+- ownership
+- soundboard policy
+- stage permissions
 
-```text
-apps/teleparty-convex/
-|- convex/                 # Convex schema and functions
-`- src/                    # UI, routes, providers, shared client-side logic
+### Hot realtime
 
-apps/teleparty-spacetime/
-|- spacetimedb/            # Spacetime schema and reducers
-`- src/                    # UI, providers, generated module bindings
-```
+- cursor movement
+- presence
+- drawing strokes
+- sound events
 
-Shared repo-level concerns:
-- `justfile` standardizes commands
-- `direnv` + Nix provide the toolchain
-- Bun is the package/runtime baseline
+Convex and SpacetimeDB expose very different programming models for the second category. See [Realtime comparison](realtime-comparison.md) and [Data flow](data-flow.md).
 
-See [[commands]] and [[environment]].
+## Repo-level orchestration
+
+`justfile` is the public developer interface. `scripts/tasks.nu` handles the multi-process details behind it.
+
+Nix + direnv provide the pinned toolchain; Bun is the package/runtime baseline.
+
+For setup, use [Getting started](getting-started.md). For commands, use [Commands](commands.md).

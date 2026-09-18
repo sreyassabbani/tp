@@ -2,101 +2,101 @@
 tags: [backend, spacetimedb, realtime]
 ---
 
-# SpacetimeDB Backend
+# SpacetimeDB backend
 
-<- [[index|Home]] / [[overview]]
+The implementation is split between the database module and generated frontend bindings.
 
-The Spacetime implementation is split across module source and generated frontend bindings.
-
----
-
-## Files
+## Key files
 
 ```text
-apps/teleparty-spacetime/spacetimedb/src/index.ts   # schema + reducers
-apps/teleparty-spacetime/src/module_bindings/       # generated TS bindings
-apps/teleparty-spacetime/src/integrations/spacetime/provider.tsx
+apps/teleparty-spacetime/
+├── spacetimedb/src/index.ts
+├── src/module_bindings/
+└── src/integrations/spacetime/provider.tsx
 ```
 
-Recommended local dev entry point:
+Normal local development should start from the repo root:
 
 ```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+just spacetime-dev
 ```
 
-That wraps the Spacetime CLI into one repo-level command instead of making you run server, publish/generate, and web in separate terminals.
+That handles server startup, initial publish, binding generation, source watching, and the frontend.
 
----
-
-## Public Tables
+## Public tables
 
 ### `room`
-Stores room metadata and room-wide soundboard settings.
+
+Stores room metadata, visibility/access code, owner session ID, soundboard policy, activity timestamps, and archive state.
 
 ### `participant`
-Stores participant presence and cursor state directly in the replicated table.
+
+Stores participant identity, connection ID, last-seen time, and cursor position.
 
 ### `drawingStroke`
-Stores shared overlay drawing strokes per room.
+
+Stores shared stage drawing strokes as normalized point payloads.
 
 ### `soundEvent`
-Stores recent soundboard events.
 
----
+Stores recent soundboard events.
 
 ## Reducers
 
-Key reducers:
-- `addDrawingStroke`
+Important reducers include:
+
 - `createRoom`
-- `joinRoom`
-- `leaveRoom`
-- `clearDrawingStrokes`
+- `joinRoom` / `leaveRoom`
 - `updateCursor`
 - `triggerSound`
+- `addDrawingStroke` / `clearDrawingStrokes`
 - `updateSoundboardPolicy`
 - `cleanupRoom`
 
-The reducer model means writes happen over the database connection, not through a separate HTTP mutation API.
+The module validates/normalizes reducer inputs before writing table state.
 
----
+## Read path
 
-## Client Read Path
+The frontend subscribes to generated table bindings. Room, participant, sound, and drawing rows become reactive client state without an application-level query function for each read.
 
-The frontend reads tables through generated hooks such as `useTable(...)`.
+For cursors, the participant row already contains the last cursor position.
 
-Examples:
-- room rows filtered by `roomCode`
-- participant rows filtered by `roomCode`
-- drawing stroke rows filtered by `roomCode`
-- sound event rows filtered by `roomCode`
+## Generated bindings
 
-Because the participant table already carries cursor state, the room page does not need a second query just to render cursors. Drawing overlay state is likewise read directly from replicated table rows.
+`src/module_bindings/` is generated from the module schema.
 
----
+With the normal `just spacetime-dev` workflow, module changes trigger binding regeneration. With the split workflow, rerun:
 
-## Connection Model
+```bash
+just spacetime-sync
+```
 
-The provider creates a persistent database connection and caches the auth token in local storage.
+after schema/reducer changes.
 
-Notable setting:
-- `withConfirmedReads(false)` favors responsiveness over waiting for confirmed-read semantics
+## Connection model
 
----
+The frontend maintains a persistent database connection and caches Spacetime auth state locally.
 
-## Why This Backend Usually Feels Snappier for Cursors
+The provider uses `withConfirmedReads(false)`, favoring responsive local subscription behavior over waiting for confirmed-read semantics.
 
-The hot path is closer to:
-- pointer move -> reducer
-- replicated participant row updates
-- subscribed table row changes in the client
-- React rerender
+## Ownership limitation
 
-That is a better fit for cursor/presence-style state than the explicit query/mutation subscription loop in the Convex variant.
+SpacetimeDB currently identifies the room owner by `ownerSessionId`. It does not mirror Convex's additional owner secret or participant capability-grant model.
 
-The frontend also paints the local cursor optimistically, so your own cursor does not wait on replicated table updates before moving on screen.
+That is sufficient for this prototype comparison but should not be treated as strong authentication.
 
-The room page also batches cursor publishes through a short client-side send interval instead of emitting every raw device event. That keeps the motion feeling live without turning the reducer stream into unnecessary noise.
+See [Permissions and ownership](permissions-and-ownership.md) and [Feature matrix](feature-matrix.md).
 
-See [[realtime-comparison]].
+## Realtime implication
+
+The cursor path is structurally short:
+
+```text
+pointer sample
+  -> updateCursor reducer
+  -> participant row changes
+  -> replicated row reaches clients
+  -> remote cursor rerenders
+```
+
+That makes replicated-table systems interesting for hot room state, but this repo does not yet contain a controlled latency benchmark. See [Realtime comparison](realtime-comparison.md).

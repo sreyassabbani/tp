@@ -4,86 +4,78 @@ tags: [reference, environment, configuration]
 
 # Environment
 
-<- [[index|Home]]
+The repo assumes Nix + direnv and is designed to be operated from the repository root.
 
-This repo assumes a Nix + direnv workflow.
+## Root dev shell
 
----
+`.envrc` enters the flake-defined shell. The shell supplies the project toolchain, including:
 
-## Root Environment
-
-### `.envrc`
-The repo root uses `direnv` to enter a pinned Nix dev shell.
-
-That shell provides:
-- Node.js
+- Node.js 24
 - Bun
-- just
-- Rust toolchain
-- SpacetimeDB CLI
+- `just`
+- Rust/Cargo
+- SpacetimeDB CLI 2.0.3
 
-Run once after cloning:
+First-time approval:
 
 ```bash
-cd /Users/sreysus/workflow/tp
 direnv allow
 ```
 
----
+If the shell becomes stale after changing `flake.nix`, use:
 
-## Convex Environment
+```bash
+direnv reload
+```
 
-File:
-- `apps/teleparty-convex/.env.local`
+## Convex
+
+Generated/local file:
+
+```text
+apps/teleparty-convex/.env.local
+```
 
 Important variable:
-- `VITE_CONVEX_URL`
 
-How it is set:
-- `bun run convex:dev` writes/refreshes the local Convex URL
-- the frontend provider throws if the variable is missing
+- `VITE_CONVEX_URL` — the current Convex backend URL used by the TanStack app
 
----
+`just convex-dev` waits for Convex dev sync to write this value before it starts the frontend.
 
-## Spacetime Environment
+The SvelteKit task reads the same value and injects it as `PUBLIC_CONVEX_URL`.
 
-File:
-- `apps/teleparty-spacetime/.env.local`
+In normal development, do not hand-maintain these URLs.
 
-Important variables:
+## SpacetimeDB
+
+Frontend variables:
+
 - `VITE_STDB_URL`
 - `VITE_STDB_DATABASE`
 
-Defaults in code:
-- `ws://127.0.0.1:3010`
-- `teleparty-spacetime`
+Code defaults:
 
-Spacetime local data directory:
-- `apps/teleparty-spacetime/.spacetime/data`
+- URL: `ws://127.0.0.1:3010`
+- database: `teleparty-spacetime`
 
-Recommended local entry point:
+Local database state lives under:
 
-```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:dev
+```text
+apps/teleparty-spacetime/.spacetime/data
 ```
 
-That command handles the usual local server/publish/generate/run sequence for you from one entry point.
+Deleting that directory resets local SpacetimeDB state. Do that only when you intentionally want a fresh local database or need to recover from corrupted/stale local state.
 
-If local publish/auth state gets corrupted, removing that data directory and restarting is the usual reset path.
+## Browser-local state
 
----
+The apps use local storage for anonymous identity.
 
-## Local Browser Storage
+Convex-backed frontends store a browser session profile and an owner session secret. SpacetimeDB stores a browser session profile and its connection/auth state.
 
-Both apps rely on local storage for anonymous browser identity.
+Consequences:
 
-Convex keys:
-- room/browser session profile
-- owner session secret
+- identity is browser-local rather than account-based;
+- incognito windows behave like separate users;
+- clearing site data can remove the browser's ownership proof.
 
-Spacetime keys:
-- room/browser session profile
-- cached Spacetime auth token
-
-This means browser storage is part of the effective local environment for development.
+This browser state is part of the effective development environment. See [Permissions and ownership](permissions-and-ownership.md).

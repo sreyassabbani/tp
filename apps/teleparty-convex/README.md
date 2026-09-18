@@ -1,38 +1,27 @@
-# Teleparty Convex Version
+# Teleparty — Convex
 
-TanStack Start + shadcn UI + Convex backend.
+The Convex implementation of the Teleparty Clone Lab.
 
-## Features
-
-- room creation from arbitrary watch URL
-- public/private rooms (private rooms use access code)
-- live cursor presence
-- soundboard events with participant-capacity gating
-- room-owner soundboard policy overrides
-- Convex components:
-  - `@convex-dev/presence`
-  - `@convex-dev/rate-limiter`
-  - `@convex-dev/workflow`
+It uses TanStack Start + React for the frontend and Convex for queries, mutations, subscriptions, presence, rate limiting, and room-expiry workflows.
 
 ## Run
 
-```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp bun install
-direnv exec /Users/sreysus/workflow/tp bun run convex:dev
-```
-
-Then in another terminal:
+From the repository root:
 
 ```bash
-cd /Users/sreysus/workflow/tp/apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp bun run dev
+direnv allow
+just bootstrap
+just convex-dev
 ```
 
-App URL: `http://localhost:3001`
+Open `http://localhost:3001`.
 
-## Build
+For individual backend/web processes or build commands, see [`docs/commands.md`](../../docs/commands.md).
 
-```bash
-direnv exec /Users/sreysus/workflow/tp bun run build
-```
+## Implementation notes
+
+Backend code lives in `convex/`. Frontend code lives in `src/`.
+
+This variant currently includes room-wide stage interaction policy and per-participant stage-control grants. Shared drawing is currently a SpacetimeDB-only feature.
+
+See [Convex backend](../../docs/convex-backend.md) and the [feature matrix](../../docs/feature-matrix.md).

@@ -2,100 +2,104 @@
 tags: [architecture, realtime, comparison]
 ---
 
-# Realtime Comparison
+# Realtime comparison
 
-<- [[index|Home]] / [[overview]]
+This page compares the **current implementations in this repo**. It is not a general benchmark proving that one backend is faster than the other.
 
-If Convex feels slower than SpacetimeDB in this repo, that is not surprising.
+## The useful split
 
----
+The product contains different classes of state.
 
-## Short Version
+### Low/medium-frequency state
 
-This product has two kinds of state:
-
-### Cold or medium-frequency state
 - room creation
-- privacy changes
-- soundboard policy
+- privacy/access changes
 - ownership and permissions
+- soundboard policy
 
 ### Hot state
+
 - cursor movement
 - presence
-- fast fanout UI updates
+- drawing strokes
+- fast fanout events
 
-Convex handles the first category very naturally.
-SpacetimeDB is a better fit for the second.
+The backend programming model becomes much more visible on hot state.
 
----
+## Convex cursor path
 
-## Why Convex Feels Slower Here
-
-The Convex implementation uses:
-- frontend mutation calls for writes
-- backend table writes
-- subscribed queries for reads
-
-That is a perfectly good application architecture, but it is not the fastest possible shape for a pointer loop.
-
-Every cursor update still looks roughly like:
+Roughly:
 
 ```text
-client event -> mutation -> backend write -> query refresh/subscription -> rerender
+pointer sample
+  -> Convex mutation
+  -> cursor row write
+  -> subscribed query data updates
+  -> remote cursor rerenders
 ```
 
-For room controls, policies, and durable metadata, that is fine.
-For cursors, it is more overhead than the Spacetime path.
+The implementation also paints the local cursor optimistically, so the user's own cursor does not wait for the network path.
 
----
+Convex makes backend function boundaries explicit and gives durable product logic a clear query/mutation model.
 
-## Why SpacetimeDB Fits This Workload Better
+## SpacetimeDB cursor path
 
-The Spacetime implementation keeps hot room state directly in replicated tables.
-
-That makes the shape closer to:
+Roughly:
 
 ```text
-client event -> reducer -> replicated row update -> rerender
+pointer sample
+  -> reducer
+  -> participant row write
+  -> replicated table update
+  -> remote cursor rerenders
 ```
 
-Less orchestration is needed to keep cursors feeling live.
+The local cursor is also optimistic.
 
----
+Because cursor state is already part of the replicated participant table, there are fewer application-level read/write abstractions in this path.
 
-## What This Means For This Repo
+## What the repo currently suggests
 
-If the main product goal is:
-- shared cursors
-- live room state
-- eventually synchronized controls
+For this specific implementation, SpacetimeDB provides a more direct programming model for replicated cursor/drawing state.
 
-then SpacetimeDB is probably the more natural long-term backend for this app.
+Convex provides a more explicit function-oriented boundary for room policy, permissions, and workflow-style logic.
 
-If the main product goal is:
-- explicit backend validation
-- mutation/query ergonomics
-- simpler durable business logic workflows
+Those are architectural observations. They are **not** yet latency measurements.
 
-then Convex is still a solid choice, but it will need more careful tuning on hot interaction paths.
+## What is not established
 
----
+The repo currently has no controlled benchmark for:
 
-## Recent Cursor Tuning
+- event-to-remote-paint latency (p50/p95/p99)
+- throughput under many participants
+- bytes transferred per cursor sample
+- server/client CPU cost
+- reconnect behavior under packet loss
+- cost at equivalent workload
+- consistency tradeoffs under failure
 
-This repo now avoids two avoidable Convex costs:
-- cursor updates no longer rewrite participant-profile metadata
-- room liveness heartbeats only bump `lastActivityAt` once per minute at most
-- local cursor rendering is optimistic, so your own cursor paints immediately
-- the old Convex cursor write cap was raised because it was too conservative for pointer movement
+Without those measurements, “SpacetimeDB is faster” would be too broad a conclusion.
 
-Those changes reduce write churn, but they do not change the underlying architectural tradeoff.
+## Existing tuning
 
----
+The current clients already avoid several self-inflicted costs:
 
-## Recommendation
+- outbound cursor updates are sampled rather than sent for every raw pointer event;
+- local cursors render optimistically;
+- Convex cursor updates no longer rewrite participant-profile metadata on every pointer sample;
+- Convex room-liveness updates are rate-limited relative to cursor traffic.
 
-If you care most about the room *feeling* realtime, try the Spacetime variant next.
+These changes make the comparison less about obviously wasteful client behavior and more about backend shape.
 
-That is the honest comparison this repo is set up to make.
+## If you benchmark this later
+
+Measure the same action under the same conditions:
+
+1. timestamp a sampled pointer event;
+2. timestamp local optimistic paint separately;
+3. timestamp the corresponding remote paint;
+4. repeat with multiple room sizes;
+5. report distributions, not just averages;
+6. record network traffic and backend write/reducer rates.
+
+That would turn the current architectural comparison into evidence about actual runtime behavior.

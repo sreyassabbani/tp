@@ -2,111 +2,58 @@
 tags: [home, overview]
 ---
 
-# Teleparty Clone Lab - Documentation
+# Teleparty Clone Lab docs
 
-Welcome to the Teleparty Clone Lab documentation vault. This repo contains two implementations of the same product:
+This is the documentation entry point. The root [README](../README.md) stays intentionally short; detailed developer information lives here.
 
-- `apps/teleparty-convex` - TanStack Start + Convex
-- `apps/teleparty-spacetime` - TanStack Start + SpacetimeDB
+## Start by task
 
-It also contains one experimental frontend spike:
+| I want to... | Read |
+| --- | --- |
+| run the project for the first time | [Getting started](getting-started.md) |
+| see what each app actually supports | [Feature matrix](feature-matrix.md) |
+| understand the repo shape | [Architecture overview](overview.md) |
+| find a dev/build command | [Commands](commands.md) |
+| fix a local setup problem | [Troubleshooting](troubleshooting.md) |
+| understand environment variables/local state | [Environment](environment.md) |
+| understand product schemas and parsing | [Domain model](domain-model.md) |
+| understand the frontend | [Frontend overview](frontend-overview.md) |
+| inspect the Convex implementation | [Convex backend](convex-backend.md) |
+| inspect the SpacetimeDB implementation | [SpacetimeDB backend](spacetime-backend.md) |
+| compare the realtime models | [Realtime comparison](realtime-comparison.md) |
+| understand ownership/permissions | [Permissions and ownership](permissions-and-ownership.md) |
+| trace cursor data end to end | [Data flow](data-flow.md) |
+| see dependency/tooling choices | [Tech stack](tech-stack.md) |
 
-- `apps/teleparty-sveltekit` - SvelteKit design and interaction prototype wired to the Convex backend
+## The three apps
 
-Both variants aim for feature parity, but the realtime transport and backend programming model are intentionally different.
+- `apps/teleparty-convex` — main implementation, TanStack Start + Convex
+- `apps/teleparty-spacetime` — main implementation, TanStack Start + SpacetimeDB
+- `apps/teleparty-sveltekit` — frontend experiment on the Convex backend
 
-Obsidian setup is checked in under `docs/.obsidian`, so you can open `docs/` directly as a vault.
+The first two are the backend comparison. The SvelteKit app is a separate frontend experiment.
 
----
+## Fast path
 
-## Navigation
-
-### Architecture
-- [[overview]] - What this repo is and how the pieces fit together
-- [[tech-stack]] - Libraries, runtimes, and tooling
-- [[data-flow]] - A single realtime action traced end to end
-- [[realtime-comparison]] - Why Convex and Spacetime feel different in practice
-
-### Shared Product Model
-- [[frontend-overview]] - Shared UI structure and route layout
-- [[domain-model]] - Shared Zod schemas, room rules, and URL parsing
-- [[permissions-and-ownership]] - Anonymous browser identity, owner controls, and participant grants
-
-### Backend Implementations
-- [[convex-backend]] - Convex schema, functions, and components
-- [[spacetime-backend]] - Spacetime tables, reducers, and generated bindings
-
-### Reference
-- [[commands]] - Daily dev commands and build flows
-- [[environment]] - Runtime variables and local environment expectations
-
----
-
-## Quick Start
+From the repo root:
 
 ```bash
-cd /Users/sreysus/workflow/tp
 direnv allow
 just bootstrap
-```
-
-Convex flow:
-
-```bash
 just convex-dev
 ```
 
-Spacetime flow:
+Swap the last command for `just spacetime-dev` or `just sveltekit-dev` as needed.
 
-```bash
-just spacetime-dev
-```
+For what those commands actually launch, use [Getting started](getting-started.md) and [Commands](commands.md).
 
-Experimental SvelteKit spike:
+## Documentation convention
 
-```bash
-just sveltekit-dev
-```
+- `README.md` answers “what is this?”
+- `getting-started.md` is the canonical setup path
+- `commands.md` is the command reference
+- `feature-matrix.md` records current parity instead of assuming it
+- backend/frontend pages explain implementation details
+- `troubleshooting.md` owns reset and recovery procedures
 
-Build both:
-
-```bash
-just build-all
-```
-
----
-
-## Project Structure
-
-```text
-tp/
-|- apps/
-|  |- teleparty-convex/
-|  |  |- convex/          # Convex schema + functions
-|  |  `- src/             # TanStack Start frontend
-|  |- teleparty-spacetime/
-|     |- spacetimedb/     # SpacetimeDB module source
-|     `- src/             # TanStack Start frontend + generated bindings
-|  `- teleparty-sveltekit/
-|     `- src/             # SvelteKit frontend experiment on Convex
-|- docs/                  # This documentation vault
-|- AGENTS.md              # Repo-specific instructions for coding agents
-|- justfile               # Canonical dev commands, implemented in Nu
-`- README.md              # High-level repo summary
-```
-
----
-
-## What This Project Is For
-
-This repo is not just a single app. It is a side-by-side lab for comparing two realtime backends against the same product:
-
-- room creation from arbitrary watch links
-- shared cursor overlays
-- soundboard events
-- room visibility and access codes
-- owner controls and participant permissions
-
-If you are trying to understand why one implementation feels better than the other, start with [[realtime-comparison]].
-
-If you want the easiest local workflows, use `just convex-dev` or `just spacetime-dev`. The split subcommands still exist, but only as manual fallbacks.
+`docs/` can be opened directly as an Obsidian vault, but all primary navigation uses normal Markdown links so the docs also work on GitHub.

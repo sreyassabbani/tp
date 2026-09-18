@@ -2,154 +2,95 @@
 tags: [reference, commands, dev]
 ---
 
-# Dev Commands
+# Commands
 
-<- [[index|Home]]
+Run `just` recipes from the repository root. They are the supported developer interface; `scripts/tasks.nu` implements them.
 
-Use `just` from the repo root. It is the canonical entry point. The recipe implementations live in Nu.
+## Normal workflow
 
----
+| Command | What it does |
+| --- | --- |
+| `just bootstrap` | installs dependencies for all three apps plus the Spacetime module |
+| `just convex-dev` | runs Convex backend sync + the web app on port 3001 |
+| `just spacetime-dev` | runs local SpacetimeDB + publish/generate watchers + web app on port 3002 |
+| `just sveltekit-dev` | runs Convex backend sync + SvelteKit on port 3003 |
+| `just build-all` | builds the Convex and Spacetime main implementations |
+| `just convex-build` | builds the Convex app |
+| `just spacetime-build` | builds the Spacetime module, then the web app |
+| `just sveltekit-build` | runs Svelte checks, then builds the SvelteKit spike |
 
-## Bootstrap
-
-```bash
-cd /Users/sreysus/workflow/tp
-just bootstrap
-```
-
-Installs Bun dependencies for:
-- `apps/teleparty-convex`
-- `apps/teleparty-spacetime`
-- `apps/teleparty-spacetime/spacetimedb`
-- `apps/teleparty-sveltekit`
-
----
-
-## Convex Flow
-
-Recommended:
+To list recipes:
 
 ```bash
-just convex-dev
+just
 ```
 
-This runs the backend sync and web client together, and waits for `VITE_CONVEX_URL` before booting Vite.
+## Split commands
 
-Manual fallback:
+Use these when debugging processes separately.
+
+### Convex
 
 ```bash
 just convex-backend
 just convex-web
 ```
 
-Manual equivalents:
+`convex-backend` runs Convex dev sync. `convex-web` runs Vite on port `3001`.
+
+### SpacetimeDB
+
+```bash
+just spacetime-db
+just spacetime-sync
+just spacetime-web
+```
+
+- `spacetime-db` starts the local database on `127.0.0.1:3010`.
+- `spacetime-sync` publishes the module and regenerates TypeScript bindings once.
+- `spacetime-web` starts Vite on port `3002`.
+
+If the module schema/reducers change while you are using the split workflow, rerun `just spacetime-sync`.
+
+## Package-level checks
+
+These bypass the repo orchestration and are mainly useful while debugging one app.
+
+Convex:
 
 ```bash
 cd apps/teleparty-convex
- direnv exec /Users/sreysus/workflow/tp bun run convex:dev
+bun run check
+bun run test
+bun run convex:dev:once
 ```
 
-```bash
-cd apps/teleparty-convex
- direnv exec /Users/sreysus/workflow/tp bun run dev
-```
-
----
-
-## Spacetime Flow
-
-Recommended:
-
-```bash
-just spacetime-dev
-```
-
-This uses the repo wrapper to:
-- start the local server
-- publish the module
-- regenerate bindings
-- keep publish and binding-refresh watchers running
-- run the web dev server
-
-Manual fallback:
+SpacetimeDB:
 
 ```bash
 cd apps/teleparty-spacetime
- direnv exec /Users/sreysus/workflow/tp bun run spacetime:start
+bun run check
+bun run test
+bun run spacetime:build
+bun run spacetime:generate
 ```
+
+SvelteKit:
 
 ```bash
-cd apps/teleparty-spacetime
- direnv exec /Users/sreysus/workflow/tp bun run spacetime:publish:local
- direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
+cd apps/teleparty-sveltekit
+bun run check
 ```
 
-```bash
-cd apps/teleparty-spacetime
- direnv exec /Users/sreysus/workflow/tp bun run dev
-```
-
-The repo used to expose the split flow more prominently, which made Spacetime feel heavier than it needed to. The recommended path is now one command from the repo root.
-
----
-
-## Build
-
-Build both:
-
-```bash
-just build-all
-```
-
-Build one app:
-
-```bash
-just convex-build
-just spacetime-build
-```
-
-Experimental spike:
-
-```bash
-just sveltekit-dev
-just sveltekit-build
-```
-
-`just sveltekit-dev` starts the same Convex backend sync used by `just convex-dev`, then runs the SvelteKit frontend on port `3003` with `PUBLIC_CONVEX_URL` injected from `apps/teleparty-convex/.env.local`.
-
----
-
-## Useful Verification Commands
-
-Convex typecheck:
-
-```bash
-direnv exec /Users/sreysus/workflow/tp ./apps/teleparty-convex/node_modules/.bin/tsc -p apps/teleparty-convex/tsconfig.json --noEmit
-```
-
-Convex one-shot backend sync:
-
-```bash
-cd apps/teleparty-convex
-direnv exec /Users/sreysus/workflow/tp bun run convex:dev:once
-```
-
-Spacetime module regeneration:
-
-```bash
-cd apps/teleparty-spacetime
-direnv exec /Users/sreysus/workflow/tp bun run spacetime:generate
-```
-
----
+The current `test` scripts are scaffolding; the repo does not yet have a meaningful behavioral test suite.
 
 ## Ports
 
 | Port | Service |
-|------|---------|
+| --- | --- |
 | `3001` | Convex web app |
 | `3002` | Spacetime web app |
-| `3003` | Experimental SvelteKit spike |
-| `3010` | Local SpacetimeDB server |
+| `3003` | SvelteKit experiment |
+| `3010` | local SpacetimeDB server |
 
-Convex backend endpoint is managed through `.env.local` rather than a fixed human-facing port in this repo.
+See [Troubleshooting](troubleshooting.md) for port conflicts and reset procedures.

@@ -1,64 +1,55 @@
 # AGENTS.md
 
 ## Purpose
-This repo hosts two Teleparty-style web apps that share the same product behavior but use different realtime backends:
 
-- `apps/teleparty-convex` (Convex)
-- `apps/teleparty-spacetime` (SpacetimeDB v2.0)
+This repo compares two implementations of the same Teleparty-style product:
 
-Both should stay feature-parity aligned.
+- `apps/teleparty-convex` — TanStack Start + Convex
+- `apps/teleparty-spacetime` — TanStack Start + SpacetimeDB
 
-## Core Principles
+`apps/teleparty-sveltekit` is a frontend experiment that uses the Convex backend. It is not part of the backend parity track.
 
-- Make invalid states unrepresentable.
-- Parse, do not validate late.
-- Prefer typed/discriminated unions over boolean-flag combinations.
-- Keep hooks unconditional and stable in order.
-- Preserve good UI/UX and non-boilerplate design quality.
+## Working rules
 
-## Environment Conventions
+- Make invalid states hard to represent.
+- Parse inputs at boundaries instead of validating them late.
+- Prefer typed/discriminated state over combinations of boolean flags.
+- Keep React hooks unconditional and stable in order.
+- Preserve deliberate UI quality; do not replace the interface with generic boilerplate.
+- Do not claim feature parity without checking both implementations.
 
-- Nix + direnv are the default workflow (`direnv allow` at repo root).
-- Bun is the package/runtime baseline (pnpm was removed).
-- Use `justfile` recipes from repo root for day-to-day workflows.
+## Canonical workflow
 
-## Quick Commands
-
-Bootstrap:
+Run development commands from the repo root:
 
 ```bash
+direnv allow
 just bootstrap
+just convex-dev
+just spacetime-dev
 ```
 
-Convex (2 terminals):
+Useful alternatives:
 
 ```bash
-just convex-backend
-just convex-web
-```
-
-Spacetime (3 terminals):
-
-```bash
-just spacetime-db
-just spacetime-sync
-just spacetime-web
-```
-
-Build both:
-
-```bash
+just sveltekit-dev
 just build-all
 ```
 
-## Project Notes
+Use the split commands only when debugging individual processes. See `docs/commands.md`.
 
-- URL input is parsed through shared domain schema.
-- Room identity is by room code, not watch URL.
-- YouTube links are normalized to embeddable iframe URLs.
-- Soundboard policy should be modeled and edited as a discriminated state.
+## Documentation rules
 
-## Known Gaps
+Keep `README.md` short. Put detailed setup in `docs/getting-started.md`, command details in `docs/commands.md`, and failures/reset procedures in `docs/troubleshooting.md`.
 
-- No meaningful test suite yet (`bun run test` currently reports no tests).
-- External site embedding remains provider-dependent.
+When behavior changes:
+
+1. update `docs/feature-matrix.md` if parity changes;
+2. update the relevant backend/frontend page;
+3. avoid machine-specific absolute paths in documentation.
+
+## Current gaps
+
+- No meaningful automated test suite yet.
+- External iframe embedding remains provider-dependent.
+- Main-app parity is a target, not an invariant.

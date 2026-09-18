@@ -2,83 +2,74 @@
 tags: [architecture, domain-model, data]
 ---
 
-# Domain Model
+# Domain model
 
-<- [[index|Home]] / [[overview]]
+The product concepts are shared across implementations, but the validation code is not literally one shared package.
 
-The shared product rules live in Zod schemas rather than scattered UI checks.
+- Frontend boundaries use Zod schemas.
+- Convex mirrors the rules in its backend domain/validator layer.
+- SpacetimeDB normalizes and rejects reducer inputs inside the module.
 
----
+That distinction matters: parity is maintained deliberately rather than guaranteed by code sharing.
 
-## Core Concepts
+## Room code
 
-### Room Code
-A room is identified by a generated six-character code.
+A room code is exactly six characters from:
 
 ```text
 ABCDEFGHJKLMNPQRSTUVWXYZ23456789
 ```
 
-Rules:
-- 6 characters exactly
-- excludes `I` and `O` to avoid visual ambiguity
-- excludes `0` and `1` for the same reason
+`I`, `O`, `0`, and `1` are omitted to reduce visual ambiguity.
 
-### Visibility
-A room is one of:
-- `public`
-- `private` with a normalized access code
+Room identity comes from the room code, not the watch URL. Two rooms may point at the same URL.
 
-This is modeled as a discriminated union, not a boolean plus optional string.
+## Visibility
 
-### Soundboard Policy
-A room soundboard policy is one of:
-- `auto` - enabled up to a default participant threshold
-- `manual` - owner controls enablement and threshold directly
+A room is either:
 
-### Stage Interaction Policy
-A room stage policy is one of:
+- public; or
+- private with an access code.
+
+Convex models this as a discriminated union. SpacetimeDB stores normalized fields but enforces the same product distinction at reducer boundaries.
+
+## Soundboard policy
+
+The product has two policy modes:
+
+- `auto` — enabled while the participant count stays under the default threshold;
+- `manual` — owner controls whether it is enabled and the allowed participant count.
+
+The current capacity range is 2–64 participants, with an automatic default of 8.
+
+## Stage interaction
+
+The Convex-backed product has a room-wide stage policy:
+
 - `everyone`
 - `owner_only`
 
-Convex currently also supports participant grants for `stage_control` on top of the room-wide policy. See [[permissions-and-ownership]].
+Convex also supports participant capability grants. The current UI actively uses `stage_control` grants so selected participants can interact with the stage even when the room-wide policy is owner-only.
 
----
+SpacetimeDB does not currently mirror this permission model. See [Feature matrix](feature-matrix.md).
 
-## Watch URL Parsing
+## Watch URLs
 
-Watch URLs are parsed through a shared schema before room creation.
+Watch URLs must use HTTP or HTTPS.
 
-Rules:
-- must be a valid `http` or `https` URL
-- YouTube URLs are normalized to embeddable iframe URLs
-- the raw room identity is still the room code, not the URL
+Recognized YouTube forms include:
 
-This is why link collisions are acceptable. Two rooms can use the same watch URL and still be distinct rooms.
-
----
-
-## YouTube Normalization
-
-Supported forms include:
 - `youtube.com/watch?v=...`
 - `youtu.be/...`
 - `youtube.com/embed/...`
 - `youtube.com/shorts/...`
 
-The shared helper extracts:
-- video ID
-- optional start time from `start` or `t`
+The frontend extracts a valid video ID, preserves recognized `start`/`t` offsets, and produces a `youtube-nocookie.com/embed/...` URL.
 
-Then it produces a `youtube-nocookie.com/embed/...` URL.
+Other URLs remain ordinary URLs and may still fail to embed if the external provider blocks iframes.
 
----
+## Design rule
 
-## Why This Matters
+Parse once at the boundary, then let the rest of the app operate on normalized data.
 
-This approach keeps invalid states harder to represent:
-- no half-private rooms
-- no malformed room codes downstream
-- no manual string slicing for provider-specific embeds in the route layer
-
-That is the main design rule of this repo: parse early and keep the rest of the app working with normalized data.
+That reduces states such as malformed room codes, half-configured private rooms, and ad-hoc provider URL parsing deep inside route components.
